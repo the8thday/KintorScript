@@ -16,12 +16,12 @@ The goal of KintorScript is to save a copy of daily work in Kintor DTM.
 4.  CIBERSORT.R
 5.  *CN1003.R*: CN1003 data analysis
 6.  *cn1003_new.R*: finally used CN1003 data analysis script
-7.  cn_2001.R
+7.  *cn_2001.R*: CN2001 data analysis
 8.  dashboard.R
-9.  for_psa_panel.R
-10. FPKM_analysis.R
+9.  *for_psa_panel.R*: NOT used!
+10. *FPKM_analysis.R*: different expression gene calculated by FPKM.
 11. general_plot.R
-12. ic50.R
+12. *ic50.R*: use **DepMap** data
 13. kintor.sh
 14. KintorScript.Rproj
 15. meiyu.R
