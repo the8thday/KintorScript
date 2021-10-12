@@ -26,13 +26,13 @@ The goal of KintorScript is to save a copy of daily work in Kintor DTM.
 14. KintorScript.Rproj
 15. meiyu.R
 16. panel_gene.R
-17. rainfall..R
+17. rainfall.R
 18. README.Rmd
 19. run_mafft.sh
 20. run_quast.sh
 21. run_spades.sh
 22. R_Python.R
 23. survival.R
-24. tree.R
+24. **tree.R:** plot phy graph
 25. us1002.R
 26. 系统发育树.sh
