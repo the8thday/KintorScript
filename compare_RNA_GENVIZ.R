@@ -24,7 +24,7 @@ R2R4_sig <- read_delim(file.path(path, 'Group_R-2-VS-R-4_DE_significant_anno.xls
 
 go_inter <- function(x){
   x %>%
-    select(geneID, pval, FDR, logFC, Regulation, GeneSymbol)
+    dplyr::select(geneID, pval, FDR, logFC, Regulation, GeneSymbol)
 }
 
 
@@ -41,18 +41,55 @@ go_inter(R1R2_sig) %>%
   select(sort(names(.))) %>%
   write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R4.txt', delim = '\t')
 
+go_inter(R2R3_sig) %>%
+  full_join(go_inter(R2R4_sig), by = 'geneID', suffix = c('_R2R3', '_R2R4')) %>%
+  dplyr::select(sort(names(.))) %>%
+  write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.txt', delim = '\t')
 
+# merge all three files
 foo <- go_inter(R2R4_sig) %>%
   rename_with(.fn = ~paste0(.x, '_R2R4')) %>%
   rename(geneID=geneID_R2R4)
-
 go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
   full_join(foo, by = 'geneID') %>%
   select(sort(names(.)))
 
 
-# GO ----------------------------------------------------------------------
+## -----U937--------------
+
+path <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/08_DE'
+
+U5U6_sig <- read_delim(file.path(path, 'Group_U-5-VS-U-6_DE_significant_anno.xls'),
+                       delim = '\t')
+U6U7_sig <- read_delim(file.path(path, 'Group_U-6-VS-U-7_DE_significant_anno.xls'),
+                       delim = '\t')
+U6U8_sig <- read_delim(file.path(path, 'Group_U-6-VS-U-8_DE_significant_anno.xls'),
+                       delim = '\t')
+
+go_inter <- function(x){
+  x %>%
+    dplyr::select(geneID, pvalue, qvalue, log2FoldChange, Regulation, GeneSymbol)
+}
+
+U5U6_U6U7 <- go_inter(U5U6_sig) %>%
+  full_join(go_inter(U6U7_sig), by = 'geneID', suffix = c('_U5U6', '_U6U7')) %>%
+  dplyr::select(sort(names(.)))
+
+U5U6_U6U7 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U5U6_U6U7.txt',
+                          delim = '\t')
+
+U5U6_U6U8 <- go_inter(U5U6_sig) %>%
+  full_join(go_inter(U6U8_sig), by = 'geneID', suffix = c('_U5U6', '_U6U8')) %>%
+  dplyr::select(sort(names(.)))
+
+U5U6_U6U8 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U5U6_U6U8.txt',
+                          delim = '\t')
+
+
+
+
+# DIY ----------------------------------------------------------------------
 
 library(clusterProfiler)
 library(org.Hs.eg.db)
@@ -300,7 +337,7 @@ R1R2_all_go <- readxl::read_excel(file.path(path3, 'R-2-VS-R-4.xlsx'))
 koid <- c('ko05171', 'ko05321', 'ko04933', 'ko04940',
           'ko04060','ko04630','ko04668','ko04061'
           )
-koname <- c('Coronavirus disease - COVID-19', 'Inflammatory bowel disease',
+koname <- c('Coronavirus disease-COVID-19', 'Inflammatory bowel disease',
             'AGE-RAGE signaling pathway in diabetic complications',
             'Type I diabetes mellitus',
             'Cytokine-cytokine receptor interaction',
@@ -318,19 +355,63 @@ find_gene <- function(dir, ko){
     recursive = TRUE,
     ignore.case = TRUE
   )
-  down <- readxl::read_excel(file.path(path4, ff[1]))
-  up <- readxl::read_excel(file.path(path4, ff[2]))
+  if(length(ff)==0){print(glue::glue('{dir} Has No Such PathWay!'))}
+  down <- readxl::read_excel(file.path(path4, ff[1])) %>%
+    mutate(Chr=as.character(Chr))
+  up <- readxl::read_excel(file.path(path4, ff[2])) %>%
+    mutate(Chr=as.character(Chr))
   if(dim(down)==0 && dim(up)!=0){
-    return(up)
+    return(up %>% mutate(Compare = {{dir}}))
   } else if(dim(down)!=0 && dim(up)==0){
-    return(down)
+    return(down %>% mutate(Compare = {{dir}}))
   } else {
-    return(bind_rows(down, up))
+    return(bind_rows(down, up) %>%
+             mutate(Compare = {{dir}}))
   }
 }
 
-find_gene('R-2-VS-R-3', koid[1])
-find_gene('R-2-VS-R-4', koid[1])
+
+bar <- koid[2]
+find_gene('R-1-VS-R-2', bar) %>%
+  bind_rows(find_gene('R-2-VS-R-3', bar)) %>%
+  bind_rows(find_gene('R-2-VS-R-4', bar)) %>%
+  relocate(Compare, everything()) %>%
+  write_delim(file = file.path('/Users/congliu/OneDrive/kintor/Daily_Work',
+                               paste0(names(bar),'.txt')),
+              delim = '\t')
+
+
+for(i in seq_along(koid)){
+  print(koid[i])
+  find_gene('R-1-VS-R-2', koid[i]) %>%
+    bind_rows(find_gene('R-2-VS-R-3', koid[i])) %>%
+    bind_rows(find_gene('R-2-VS-R-4', koid[i])) %>%
+    relocate(Compare, everything()) %>%
+    write_delim(file = file.path('/Users/congliu/OneDrive/kintor/Daily_Work',
+                                 paste0(names(koid[i]),'.txt')),
+                delim = '\t')
+}
+
+
+# another file format
+find_gene2 <- function(dir, ko){
+  find_gene(dir = dir, ko = ko) %>%
+    dplyr::select(Compare, geneID, logFC, pval, FDR, Regulation, GeneSymbol)
+}
+
+foo <- find_gene2('R-2-VS-R-4', koid[1]) %>%
+  rename_with(.fn = ~paste0(.x, '_R2R4')) %>%
+  dplyr::rename('geneID'='geneID_R2R4')
+
+find_gene2('R-1-VS-R-2', koid[1]) %>%
+  full_join(find_gene2('R-2-VS-R-3', koid[1]), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
+  full_join(foo, by = 'geneID') %>%
+  dplyr::select(sort(names(.))) %>%
+  write_delim(file = file.path('/Users/congliu/OneDrive/kintor/Daily_Work',
+                               paste0(names(bar),'_merge.txt')),
+              delim = '\t')
+
+
 
 
 
