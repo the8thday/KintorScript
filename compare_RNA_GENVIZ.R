@@ -1,4 +1,5 @@
 library(tidyverse)
+options(BioC_mirror="https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
 
 
 # compare DEGs ------------------------------------------------------------
@@ -36,15 +37,15 @@ R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2
                           delim = '\t')
 
 
-go_inter(R1R2_sig) %>%
+R1R2_R2R4 <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R4_sig), by = 'geneID', suffix = c('_R1R2', '_R2R4')) %>%
-  select(sort(names(.))) %>%
-  write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R4.txt', delim = '\t')
+  select(sort(names(.)))
+  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R4.txt', delim = '\t')
 
-go_inter(R2R3_sig) %>%
+R2R3_R2R4 <- go_inter(R2R3_sig) %>%
   full_join(go_inter(R2R4_sig), by = 'geneID', suffix = c('_R2R3', '_R2R4')) %>%
-  dplyr::select(sort(names(.))) %>%
-  write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.txt', delim = '\t')
+  dplyr::select(sort(names(.)))
+  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.txt', delim = '\t')
 
 # merge all three files
 foo <- go_inter(R2R4_sig) %>%
@@ -54,6 +55,34 @@ go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
   full_join(foo, by = 'geneID') %>%
   select(sort(names(.)))
+
+# plot heatmap
+library(ComplexHeatmap)
+
+M <- R1R2_R2R3 %>%
+  select(GeneSymbol_R1R2, GeneSymbol_R2R3, logFC_R1R2, logFC_R2R3) %>%
+  filter(!is.na(GeneSymbol_R2R3)) %>%
+  arrange(desc(logFC_R1R2)) %>%
+  select(-GeneSymbol_R1R2) %>%
+  column_to_rownames('GeneSymbol_R2R3')
+
+Heatmap(M,
+        name = 'logFC',
+        # na_col = '',
+        border_gp = gpar(col = 'black'),
+        show_row_dend = F,
+        show_column_dend = F,
+        cluster_columns = F,
+        cluster_rows = F,
+        clustering_distance_columns = 'euclidean',
+        clustering_distance_rows = 'euclidean',
+        clustering_method_rows = 'complete',
+        clustering_method_columns = 'complete',
+        # top_annotation = ha,
+        column_names_rot = 90,
+        show_column_names = T,
+        # column_names_gp = gpar(fontsize=1)
+)
 
 
 ## -----U937--------------
