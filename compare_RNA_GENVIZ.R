@@ -51,7 +51,7 @@ R2R3_R2R4 <- go_inter(R2R3_sig) %>%
 foo <- go_inter(R2R4_sig) %>%
   rename_with(.fn = ~paste0(.x, '_R2R4')) %>%
   rename(geneID=geneID_R2R4)
-go_inter(R1R2_sig) %>%
+all_three <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
   full_join(foo, by = 'geneID') %>%
   select(sort(names(.)))
@@ -59,16 +59,18 @@ go_inter(R1R2_sig) %>%
 # plot heatmap
 library(ComplexHeatmap)
 
-M <- R1R2_R2R3 %>%
-  select(GeneSymbol_R1R2, GeneSymbol_R2R3, logFC_R1R2, logFC_R2R3) %>%
-  filter(!is.na(GeneSymbol_R2R3)) %>%
+M <- all_three %>%
+  select(GeneSymbol_R1R2, GeneSymbol_R2R3, GeneSymbol_R2R4, logFC_R1R2, logFC_R2R3, logFC_R2R4) %>%
+  filter(!is.na(GeneSymbol_R2R4)) %>%
   arrange(desc(logFC_R1R2)) %>%
-  select(-GeneSymbol_R1R2) %>%
-  column_to_rownames('GeneSymbol_R2R3')
+  select(-GeneSymbol_R2R3, -GeneSymbol_R1R2) %>%
+  column_to_rownames('GeneSymbol_R2R4')
 
+png("/Users/congliu/OneDrive/kintor/Daily_Work/all_three.png",
+    width=8,height=8,units="in",res=800)
 Heatmap(M,
         name = 'logFC',
-        # na_col = '',
+        col = circlize::colorRamp2(c(-10, 0, 10), c("navy", "white", "firebrick3")),
         border_gp = gpar(col = 'black'),
         show_row_dend = F,
         show_column_dend = F,
@@ -79,10 +81,13 @@ Heatmap(M,
         clustering_method_rows = 'complete',
         clustering_method_columns = 'complete',
         # top_annotation = ha,
-        column_names_rot = 90,
+        column_names_rot = 45,
         show_column_names = T,
-        # column_names_gp = gpar(fontsize=1)
+        row_names_gp = gpar(fontsize=1),
+        width = unit(20, 'mm')
 )
+
+dev.off()
 
 
 ## -----U937--------------
