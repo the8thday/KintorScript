@@ -3,8 +3,11 @@ library(tidyverse)
 
 df <- readxl::read_excel('/Users/congliu/OneDrive/kintor/qianx/1.5nM_profiling_with significant.xlsx')
 
-df %>% filter(ttest <= 0.05) %>%
-  filter(abs(log2ratio)>=1)
+df_profiling_3nM <- readxl::read_excel('/Users/congliu/OneDrive/kintor/qianx/MYC_profiling.xlsx') %>%
+  mutate(log2ratio = log2(ratio_3nM_ctrl))
+
+fdr <- p.adjust(df$ttest, method = 'BH')
+df$fdr <- fdr
 
 path = '/Users/congliu/OneDrive/kintor/qianx/'
 cohert = '1.5nM'
@@ -12,6 +15,7 @@ cohert = '1.5nM'
 
 df_p <- df %>% filter(signficant %in% c('up', 'down')) %>%
   arrange(desc(abs(log2ratio)), ttest)
+dim(df_p)
 
 i_gene <- Hmisc::Cs(
   GSPT2,
@@ -20,6 +24,8 @@ i_gene <- Hmisc::Cs(
   Ikaros,
   Aiolos
 ) %>% str_to_upper()
+
+df %>% filter(GeneSymbol %in% i_gene) # 并没有这几个基因的变化
 
 
 top10_up <- df_p %>% filter(signficant == 'up') %>%
@@ -35,7 +41,7 @@ p <- ggplot(df, aes(x = log2ratio, y = -log10pvalue, color = signficant)) +
   theme(legend.key = element_rect(fill = 'transparent'), legend.background = element_rect(fill = 'transparent'),
         legend.position = c(0.9, 0.93)) +
   geom_vline(xintercept = c(-1, 1), color = 'gray', size = 0.3) +
-  geom_hline(yintercept = -log(0.01, 10), color = 'gray', size = 0.3) +
+  geom_hline(yintercept = -log(0.05, 10), color = 'gray', size = 0.3) +
   # xlim(-5, 5) +
   # ylim(0, 6) +
   labs(x = '\nLog2 Fold Change', y = '-log10(pvalue)', color = '', title = '1.5nM vs DMSO') +
