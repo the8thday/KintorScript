@@ -1,4 +1,6 @@
 library(tidyverse)
+library(ComplexHeatmap)
+library(VennDiagram)
 options(BioC_mirror="https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
 
 
@@ -33,8 +35,8 @@ R1R2_R2R3 <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
   select(sort(names(.)))
 
-R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R3.txt',
-                          delim = '\t')
+# R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R3.txt',
+#                           delim = '\t')
 
 
 R1R2_R2R4 <- go_inter(R1R2_sig) %>%
@@ -56,17 +58,17 @@ all_three <- go_inter(R1R2_sig) %>%
   full_join(foo, by = 'geneID') %>%
   select(sort(names(.)))
 
-# plot heatmap
-library(ComplexHeatmap)
 
-M <- all_three %>%
-  select(GeneSymbol_R1R2, GeneSymbol_R2R3, GeneSymbol_R2R4, logFC_R1R2, logFC_R2R3, logFC_R2R4) %>%
+# plot heatmap
+
+M <- R2R3_R2R4 %>%
+  select(GeneSymbol_R2R4, GeneSymbol_R2R3, logFC_R2R4, logFC_R2R3) %>%
   filter(!is.na(GeneSymbol_R2R4)) %>%
-  arrange(desc(logFC_R1R2)) %>%
-  select(-GeneSymbol_R2R3, -GeneSymbol_R1R2) %>%
+  arrange(desc(logFC_R2R4), desc(logFC_R2R3)) %>%
+  select(-GeneSymbol_R2R3) %>%
   column_to_rownames('GeneSymbol_R2R4')
 
-png("/Users/congliu/OneDrive/kintor/Daily_Work/all_three.png",
+png("/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.png",
     width=8,height=8,units="in",res=800)
 Heatmap(M,
         name = 'logFC',
@@ -89,6 +91,27 @@ Heatmap(M,
 
 dev.off()
 
+# venn plot
+venn_list <- list(R1R2_sig=R1R2_sig$geneID,
+                  R2R3_sig=R2R3_sig$geneID,
+                  R2R4_sig=R2R4_sig$geneID)
+
+venn.plot <- venn.diagram(venn_list,
+                          filename = '/Users/congliu/OneDrive/kintor/Daily_Work/RAW_venn.png',
+                          fill = c('red', 'green', 'blue'), alpha = 0.50,
+                          # cat.col = rep('black', 2),
+                          # col = 'black',
+                          col = "transparent",
+                          print.mode=c("raw","percent"),
+                          output=TRUE,
+                          # cex = 1, fontfamily = 'serif', cat.cex = 1, cat.fontfamily = 'serif', margin = 0.2,
+                          # imagetype="png",
+                          # height = 880,
+                          # width = 880,
+                          # resolution = 1000,
+                          # compression = "lzw"
+)
+
 
 ## -----U937--------------
 
@@ -110,18 +133,79 @@ U5U6_U6U7 <- go_inter(U5U6_sig) %>%
   full_join(go_inter(U6U7_sig), by = 'geneID', suffix = c('_U5U6', '_U6U7')) %>%
   dplyr::select(sort(names(.)))
 
-U5U6_U6U7 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U5U6_U6U7.txt',
-                          delim = '\t')
+# U5U6_U6U7 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U5U6_U6U7.txt',
+#                           delim = '\t')
 
 U5U6_U6U8 <- go_inter(U5U6_sig) %>%
   full_join(go_inter(U6U8_sig), by = 'geneID', suffix = c('_U5U6', '_U6U8')) %>%
   dplyr::select(sort(names(.)))
+#
+# U6U7_U6U8 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U6U7_U6U8.txt',
+#                           delim = '\t')
 
-U5U6_U6U8 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/U5U6_U6U8.txt',
-                          delim = '\t')
+U6U7_U6U8 <- go_inter(U6U7_sig) %>%
+  full_join(go_inter(U6U8_sig), by = 'geneID', suffix = c('_U6U7', '_U6U8')) %>%
+  dplyr::select(sort(names(.)))
 
 
+M <- U6U7_U6U8 %>%
+  select(GeneSymbol_U6U7, GeneSymbol_U6U8,log2FoldChange_U6U7, log2FoldChange_U6U8) %>%
+  filter(!is.na(GeneSymbol_U6U8)) %>%
+  filter(GeneSymbol_U6U8 != '-') %>%
+  arrange(desc(log2FoldChange_U6U7), desc(log2FoldChange_U6U8)) %>%
+  filter(GeneSymbol_U6U8 != 'DNAJC9-AS1') %>%
+  select(-GeneSymbol_U6U7) %>%
+  column_to_rownames('GeneSymbol_U6U8')
 
+pdf("/Users/congliu/OneDrive/kintor/Daily_Work/U6U7_U6U8.pdf",
+    width=8,height=8)
+Heatmap(M,
+        name = 'logFC',
+        col = circlize::colorRamp2(c(-10, 0, 10), c("navy", "white", "firebrick3")),
+        border_gp = gpar(col = 'black'),
+        show_row_dend = F,
+        show_column_dend = F,
+        cluster_columns = F,
+        cluster_rows = F,
+        clustering_distance_columns = 'euclidean',
+        clustering_distance_rows = 'euclidean',
+        clustering_method_rows = 'complete',
+        clustering_method_columns = 'complete',
+        # top_annotation = ha,
+        column_names_rot = 45,
+        show_column_names = T,
+        row_names_gp = gpar(fontsize=1),
+        width = unit(20, 'mm'),
+        column_names_gp = gpar(fontsize=4)
+)
+
+dev.off()
+
+# venn plot
+venn_list <- list(U5U6_sig=U5U6_sig$geneID,
+                  U6U7_sig=U6U7_sig$geneID,
+                  U6U8_sig=U6U8_sig$geneID)
+venn_list <- list(
+  U5U6_sig = U5U6_sig %>% filter(GeneSymbol != '-') %>% pull(geneID),
+  U6U7_sig = U6U7_sig %>% filter(GeneSymbol != '-') %>% pull(geneID),
+  U6U8_sig = U6U8_sig %>% filter(GeneSymbol != '-') %>% pull(geneID)
+)
+
+venn.plot <- venn.diagram(venn_list,
+                          filename = '/Users/congliu/OneDrive/kintor/Daily_Work/U937_del_lncRNA_venn.png',
+                          fill = c('red', 'green', 'blue'), alpha = 0.50,
+                          # cat.col = rep('black', 2),
+                          # col = 'black',
+                          col = "transparent",
+                          print.mode=c("raw","percent"),
+                          output=TRUE,
+                          # cex = 1, fontfamily = 'serif', cat.cex = 1, cat.fontfamily = 'serif', margin = 0.2,
+                          # imagetype="png",
+                          # height = 880,
+                          # width = 880,
+                          # resolution = 1000,
+                          # compression = "lzw"
+)
 
 # DIY ----------------------------------------------------------------------
 
@@ -447,8 +531,40 @@ find_gene2('R-1-VS-R-2', koid[1]) %>%
 
 
 
+# U937 GO KEGG ------------------------------------------------------------
 
+path2 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/09_GO'
+path3 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/10_KEGG'
 
+R1R2_all_go <- readxl::read_excel(file.path(path3, 'U-5-VS-U-6.xlsx'))
+R1R2_all_go <- readxl::read_excel(file.path(path3, 'U-6-VS-U-7.xlsx'))
+R1R2_all_go <- readxl::read_excel(file.path(path3, 'U-6-VS-U-8.xlsx'))
 
+find_gene <- function(dir, ko){
+  path4 <- file.path(path3, dir)
+  ff <- list.files(
+    path = path4,
+    pattern = paste0('*.',ko, '_[A-Za-z]{3,4}.xlsx'),
+    recursive = TRUE,
+    ignore.case = TRUE
+  )
+  if(length(ff)==0){print(glue::glue('{dir} Has No Such PathWay!'))}
+  down <- readxl::read_excel(file.path(path4, ff[1])) %>%
+    mutate(Chr=as.character(Chr))
+  up <- readxl::read_excel(file.path(path4, ff[2])) %>%
+    mutate(Chr=as.character(Chr))
+  if(dim(down)==0 && dim(up)!=0){
+    return(up %>% mutate(Compare = {{dir}}))
+  } else if(dim(down)!=0 && dim(up)==0){
+    return(down %>% mutate(Compare = {{dir}}))
+  } else {
+    return(bind_rows(down, up) %>%
+             mutate(Compare = {{dir}}))
+  }
+}
+
+i_ko <- c('ko04080', 'ko04024', 'ko04728')
+
+find_gene('U-6-VS-U-7', 'ko04080')
 
 
