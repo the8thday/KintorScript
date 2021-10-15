@@ -61,15 +61,18 @@ all_three <- go_inter(R1R2_sig) %>%
 
 # plot heatmap
 
-M <- R2R3_R2R4 %>%
-  select(GeneSymbol_R2R4, GeneSymbol_R2R3, logFC_R2R4, logFC_R2R3) %>%
+M <- all_three %>%
+  select(GeneSymbol_R1R2, GeneSymbol_R2R3, GeneSymbol_R2R4, logFC_R1R2, logFC_R2R3, logFC_R2R4) %>%
   filter(!is.na(GeneSymbol_R2R4)) %>%
-  arrange(desc(logFC_R2R4), desc(logFC_R2R3)) %>%
-  select(-GeneSymbol_R2R3) %>%
+  arrange(desc(logFC_R1R2), desc(logFC_R2R4), desc(logFC_R2R3)) %>%
+  filter(!is.na(GeneSymbol_R1R2)) %>%
+  select(-GeneSymbol_R1R2, -GeneSymbol_R2R3) %>%
+  filter(!str_detect(GeneSymbol_R2R4, '^Gm')) %>%
+  filter(!str_detect(GeneSymbol_R2R4, 'Rik$')) %>%
   column_to_rownames('GeneSymbol_R2R4')
 
-png("/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.png",
-    width=8,height=8,units="in",res=800)
+pdf("/Users/congliu/OneDrive/kintor/Daily_Work/all_three_2.pdf",
+    width=8,height=8)
 Heatmap(M,
         name = 'logFC',
         col = circlize::colorRamp2(c(-10, 0, 10), c("navy", "white", "firebrick3")),
@@ -85,7 +88,7 @@ Heatmap(M,
         # top_annotation = ha,
         column_names_rot = 45,
         show_column_names = T,
-        row_names_gp = gpar(fontsize=1),
+        row_names_gp = gpar(fontsize=6),
         width = unit(20, 'mm')
 )
 
@@ -147,9 +150,18 @@ U6U7_U6U8 <- go_inter(U6U7_sig) %>%
   full_join(go_inter(U6U8_sig), by = 'geneID', suffix = c('_U6U7', '_U6U8')) %>%
   dplyr::select(sort(names(.)))
 
+# merge all three files
+foo <- go_inter(U6U8_sig) %>%
+  rename_with(.fn = ~paste0(.x, '_U6U8')) %>%
+  dplyr::rename(geneID=geneID_U6U8)
+all_three <- go_inter(U5U6_sig) %>%
+  full_join(go_inter(U6U7_sig), by = 'geneID', suffix = c('_U5U6', '_U6U7')) %>%
+  full_join(foo, by = 'geneID') %>%
+  dplyr::select(sort(names(.)))
 
-M <- U6U7_U6U8 %>%
-  select(GeneSymbol_U6U7, GeneSymbol_U6U8,log2FoldChange_U6U7, log2FoldChange_U6U8) %>%
+
+M <- all_three %>%
+  select(GeneSymbol_U5U6, GeneSymbol_U6U7, GeneSymbol_U6U8,log2FoldChange_U5U6, log2FoldChange_U6U7, log2FoldChange_U6U8) %>%
   filter(!is.na(GeneSymbol_U6U8)) %>%
   filter(GeneSymbol_U6U8 != '-') %>%
   arrange(desc(log2FoldChange_U6U7), desc(log2FoldChange_U6U8)) %>%
@@ -213,9 +225,21 @@ library(clusterProfiler)
 library(org.Hs.eg.db)
 library(org.Mm.eg.db)
 
-genelist <- R1R2_sig %>%
-  dplyr::select(geneID, GeneSymbol) %>%
+cohort <- 'R1R2_R2R4'
+
+genelist <- R1R2_R2R4 %>%
+  filter(!is.na(GeneSymbol_R2R4)) %>%
+  filter(!is.na(GeneSymbol_R1R2)) %>%
+  dplyr::select(geneID) %>%
+  distinct() %>%
   pull(geneID)
+
+# genelist <- U5U6_U6U8 %>%
+#   filter(!is.na(GeneSymbol_U6U8)) %>%
+#   filter(!is.na(GeneSymbol_U5U6)) %>%
+#   dplyr::select(geneID) %>%
+#   distinct() %>%
+#   pull(geneID)
 
 gene.df <- bitr(genelist,
                 fromType = 'ENSEMBL',
@@ -227,8 +251,8 @@ gene.df <- bitr(genelist,
 # go 富集分析
 enrich.go <- enrichGO(
   gene = genelist,
-  OrgDb = org.Hs.eg.db,
-  keyType = 'SYMBOL',
+  OrgDb = org.Mm.eg.db,
+  keyType = 'ENSEMBL',
   ont = 'BP',
   pAdjustMethod = 'BH',
   pvalueCutoff = 1,
@@ -283,16 +307,16 @@ ggsave(file = file.path(outpath, paste0(cohort, '_goTree.pdf')),
 kegg <- enrichKEGG(
   gene = gene.df$ENTREZID,
   keyType = 'ncbi-geneid',
-  organism = 'hsa',
+  organism = 'mmu',
   pAdjustMethod = 'fdr',
   pvalueCutoff = 0.5,
   qvalueCutoff = 0.5,
-  use_internal_data = T
+  use_internal_data = F
 )
 kegg@pvalueCutoff <- 1
 kegg@qvalueCutoff <- 1
 
-keggx <- setReadable(kegg, 'org.Hs.eg.db', 'ENTREZID')
+keggx <- setReadable(kegg, 'org.Mm.eg.db', 'ENTREZID')
 
 kegg_p <- barplot(kegg,
                   font.size = 15,
