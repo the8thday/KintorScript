@@ -164,12 +164,12 @@ M <- all_three %>%
   select(GeneSymbol_U5U6, GeneSymbol_U6U7, GeneSymbol_U6U8,log2FoldChange_U5U6, log2FoldChange_U6U7, log2FoldChange_U6U8) %>%
   filter(!is.na(GeneSymbol_U6U8)) %>%
   filter(GeneSymbol_U6U8 != '-') %>%
-  arrange(desc(log2FoldChange_U6U7), desc(log2FoldChange_U6U8)) %>%
+  arrange(desc(log2FoldChange_U5U6), desc(log2FoldChange_U6U8), desc(log2FoldChange_U6U7)) %>%
   filter(GeneSymbol_U6U8 != 'DNAJC9-AS1') %>%
-  select(-GeneSymbol_U6U7) %>%
+  select(-GeneSymbol_U6U7, -GeneSymbol_U5U6) %>%
   column_to_rownames('GeneSymbol_U6U8')
 
-pdf("/Users/congliu/OneDrive/kintor/Daily_Work/U6U7_U6U8.pdf",
+pdf("/Users/congliu/OneDrive/kintor/Daily_Work/three_groups_2.pdf",
     width=8,height=8)
 Heatmap(M,
         name = 'logFC',
@@ -188,7 +188,7 @@ Heatmap(M,
         show_column_names = T,
         row_names_gp = gpar(fontsize=1),
         width = unit(20, 'mm'),
-        column_names_gp = gpar(fontsize=4)
+        column_names_gp = gpar(fontsize=8)
 )
 
 dev.off()
@@ -589,6 +589,51 @@ find_gene <- function(dir, ko){
 
 i_ko <- c('ko04080', 'ko04024', 'ko04728')
 
-find_gene('U-6-VS-U-7', 'ko04080')
+find_gene('U-6-VS-U-8', 'ko04061') %>%
+  write_delim('/Users/congliu/OneDrive/kintor/Daily_Work/ko04061_U6U8.txt', delim = '\t')
+
+
+find_gene_go <- function(dir, ko){
+  path4 <- file.path(path2, dir)
+  ff <- list.files(
+    path = path4,
+    pattern = paste0('*.',ko, '_[A-Za-z]{3,4}.xlsx'),
+    recursive = TRUE,
+    ignore.case = TRUE
+  )
+  if(length(ff)==0){print(glue::glue('{dir} Has No Such PathWay!'))}
+  down <- readxl::read_excel(file.path(path4, ff[1])) %>%
+    mutate(Chr=as.character(Chr))
+  up <- readxl::read_excel(file.path(path4, ff[2])) %>%
+    mutate(Chr=as.character(Chr))
+  if(dim(down)==0 && dim(up)!=0){
+    return(up %>% mutate(Compare = {{dir}}))
+  } else if(dim(down)!=0 && dim(up)==0){
+    return(down %>% mutate(Compare = {{dir}}))
+  } else {
+    return(bind_rows(down, up) %>%
+             mutate(Compare = {{dir}}))
+  }
+}
+
+i_gene <- c('GO_0006955', 'GO:0051607', 'GO:0006935', 'GO:0009615', 'GO:0009617','GO:0060337',
+            'GO:0045071'
+            ) %>% str_replace(':', '_')
+names(i_gene) <- c('immune response', 'defense response to virus', 'chemotaxis',
+                   'response to virus', 'response to bacterium',
+                   'type I interferon signaling pathway',
+                   'negative regulation of viral genome replication'
+                   )
+
+find_gene_go('U-6-VS-U-8', 'GO_0006955')
+
+for(i in seq_along(i_gene)){
+  print(i_gene[i])
+  find_gene_go('U-6-VS-U-8', i) %>%
+    write_delim(file = file.path('/Users/congliu/OneDrive/kintor/Daily_Work',
+                                 paste0(names(i_gene[i]),'.txt')),
+                delim = '\t')
+}
+
 
 
