@@ -16,6 +16,24 @@ all_fpkm <- read_delim(
 
 R1R2 <- read_delim(file.path(path, 'Group_R-1-VS-R-2_DE_anno.xls'),
                    delim = '\t')
+R2R3 <- read_delim(file.path(path, 'Group_R-2-VS-R-3_DE_anno.xls'),
+                   delim = '\t')
+R2R4 <- read_delim(file.path(path, 'Group_R-2-VS-R-4_DE_anno.xls'),
+                   delim = '\t')
+
+i_gene <- Hmisc::Cs(IL1b,IL2, IL4, IL5, IL6, IL7, IL9, IL10, IL12,
+                    IL13, IL15, IL17A, IL18, IL21, IL22, IL23,IL27,IL31,
+                    FNA, IFNG, TNFA, CCL2, CCL3, CCL4,CCL11, CXCL1,CXCL8,
+                    CXCL9,CXCL10, CXCL12, CXCL13, TNFB, NGFb, BDNF, EGF, FGF2,
+                    LIF, PDGFBB,PlGF1,SCF,VEGFA,VEGFD, BAFF, GMCSF,GCSF
+                    ) %>% str_to_upper()
+
+R1R2 %>% mutate(GeneSymbol = str_to_upper(GeneSymbol)) %>%
+  filter(str_detect(GeneSymbol, paste0('^',i_gene,collapse = '|'))) %>%
+  filter(GeneSymbol %in% i_gene) %>%
+  select(GeneSymbol, logFC)
+
+
 
 R1R2_sig <- read_delim(file.path(path, 'Group_R-1-VS-R-2_DE_significant_anno.xls'),
                        delim = '\t')
@@ -629,11 +647,21 @@ find_gene_go('U-6-VS-U-8', 'GO_0006955')
 
 for(i in seq_along(i_gene)){
   print(i_gene[i])
-  find_gene_go('U-6-VS-U-8', i) %>%
+  find_gene_go('U-6-VS-U-8', i_gene[i]) %>%
     write_delim(file = file.path('/Users/congliu/OneDrive/kintor/Daily_Work',
                                  paste0(names(i_gene[i]),'.txt')),
                 delim = '\t')
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
