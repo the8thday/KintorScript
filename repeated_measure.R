@@ -26,6 +26,7 @@ library(ggsignif)
 library(ggstatsplot)
 library(geepack)
 library(lme4)
+library(lmerTest)
 # library(WRS2) # to keep the outliers in the data and perform robust ANOVA test using the WRS2 package
 
 
@@ -153,22 +154,34 @@ ggboxplot(
 #
 # two.way 重复资料 ------------------------------------------------------------
 
-# plot bar, time为组内变量、class为组间变量
+# time为组内变量、class为组间变量
 df_bar <- mt_ESR %>%
   mutate(class = 'Treated') %>%
   bind_rows(
     mn_ESR %>% mutate(class = 'Untreated')
   ) %>%
   pivot_longer(cols = -c(`Patient ID`, class, AGE), names_to = 'time', values_to = 'score') %>%
-  convert_as_factor(class, time) %>%
+  # convert_as_factor(class, time) %>%
   drop_na()
 
+# outlier test & normality
 df_bar %>%
   group_by(class, time) %>%
   shapiro_test(score)
+df_bar %>%
+  group_by(class,time) %>%
+  identify_outliers(score)
 
+# two way anova anlysis
 two.way <- anova_test(score ~ time * class + Error(`Patient ID`/time),
                       data = df_bar
+)
+two.way.res <- anova_test(
+  data = df_bar,
+  dv = score,
+  wid = `Patient ID`,
+  within = time,
+  between = class
 )
 (get_anova_table(two.way) %>%
   write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_twowayANOVA.txt'),
@@ -176,53 +189,78 @@ two.way <- anova_test(score ~ time * class + Error(`Patient ID`/time),
   ))
 # post-hoc
 pwc <- df_bar %>%
-  group_by(class) %>%
+  group_by(time) %>%
   pairwise_t_test(
-    score ~ time,
-    paired = TRUE,
+    score ~ class,
+    # paired = TRUE,
     p.adjust.method = "bonferroni"
   )
 pwc
+# Effect of treatment at each time point
+df_bar %>%
+  group_by(class) %>%
+  anova_test(dv = score, wid = `Patient ID`, within = time) %>%
+  get_anova_table() %>%
+  adjust_pvalue(method = "bonferroni")
 
-
+# add AGE as covariate
 res.aov <- anova_test(
   data = df_bar,
-  dv = score, wid = `Patient ID`,
-  within = c(time),
+  dv = score,
+  wid = `Patient ID`,
+  within = time,
   between = class,
   covariate = AGE
 )
 get_anova_table(res.aov)
 
+
+# if aov & anova_test has same results?
 fit <- aov(score ~ class * time + Error(`Patient ID`/time),
            data = df_bar)
 # report::report(fit)
 summary(fit)
 anova_summary(fit)
 
-# 协方差分析ANCOVA
-aov_xie2 <- aov(score ~ AGE + time, data = df_bar) # 协变量写在因子前面
+# 协方差分析,ANCOVA
+aov_xie2 <- aov(score ~ AGE + time*class, data = df_bar) # 协变量写在因子前面
 summary(aov_xie2)
 car::Anova(aov_xie2, type = 'III')
 
-# 广义估计方程 GEE
+
+# 广义估计方程GEE, na.omit需要删掉na值
+df_bar2 <- df_bar %>%
+  mutate(class=if_else(class=='Treated',1,0)) %>%
+  convert_as_factor(class)
 geefit <- geeglm(score ~ time + class,
                id=`Patient ID`,
                corstr='exchangeable',
                family="gaussian",
-               data=df_bar,
+               data=df_bar2,
                std.err = 'san.se')
 summary(geefit)
 broom::tidy(geefit)
+QIC(geefit)
+# 加入交互效应
+geefit2 <- geeglm(score ~ time * class,
+                 id=`Patient ID`,
+                 corstr='exchangeable',
+                 family="gaussian",
+                 data=df_bar,
+                 std.err = 'san.se')
+summary(geefit2)
 
-# 线性混合模型
-model_lmer <- lme4::lmer(score ~ time + class + (1|`Patient ID`) + (1+time|`Patient ID`),
+
+# 线性混合模型, 考虑不同患者的随机截距效应
+model_lmer <- lmer(score ~ 1 + time*class + (1|`Patient ID`),
                          data = df_bar
-)
+                   )
 performance::check_model(model_lmer)
 summary(model_lmer)
+performance::icc(model_lmer)
 
 
+## plot
 three_p <- df_bar %>% group_by(time) %>%
   wilcox_test(score ~ class) %>% pull(p)
 
@@ -275,6 +313,40 @@ ggpubr::ggbarplot(data = df_bar,
 
 
 
+
+
+
+
+
+# minus baseline ----------------------------------------------------------
+
+df2 <- mt_ESR %>%
+  mutate(Day1 = `Day 1`-`Day 0`,
+         Day7 = `Day 7`-`Day 0`
+         ) %>%
+  rename('PatientID'='Patient ID') %>%
+  pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`),
+               names_to = 'time',
+               values_to = 'score'
+  ) %>%
+  convert_as_factor(PatientID, time)
+
+
+res.aov <- anova_test(data = df2,
+                      dv = score,
+                      wid = PatientID,
+                      within = time,
+                      # covariate = `Day 0`
+                      )
+get_anova_table(res.aov)
+
+pwc <- df2 %>%
+  pairwise_t_test(
+    score ~ time,
+    paired = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+pwc
 
 
 
