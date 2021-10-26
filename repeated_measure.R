@@ -228,12 +228,15 @@ summary(aov_xie2)
 car::Anova(aov_xie2, type = 'III')
 
 
-# 广义估计方程GEE, na.omit需要删掉na值
+# 广义估计方程GEE, na.omit需要删掉na值,似乎不转换成factor会报错:NAs introduced by coercion
 df_bar2 <- df_bar %>%
+  arrange(`Patient ID`) %>%
+  rename('PatientID'='Patient ID') %>%
   mutate(class=if_else(class=='Treated',1,0)) %>%
-  convert_as_factor(class)
+  convert_as_factor(PatientID, class, time)
+
 geefit <- geeglm(score ~ time + class,
-               id=`Patient ID`,
+               id=`PatientID`,
                corstr='exchangeable',
                family="gaussian",
                data=df_bar2,
@@ -243,21 +246,39 @@ broom::tidy(geefit)
 QIC(geefit)
 # 加入交互效应
 geefit2 <- geeglm(score ~ time * class,
-                 id=`Patient ID`,
+                 id=`PatientID`,
                  corstr='exchangeable',
                  family="gaussian",
-                 data=df_bar,
+                 data=df_bar2,
                  std.err = 'san.se')
 summary(geefit2)
+QIC(geefit2)
+geefit3 <- geeglm(score ~ time * class + AGE,
+                  id=interaction(time, `PatientID`),
+                  corstr='exchangeable',
+                  family="gaussian",
+                  data=df_bar2,
+                  std.err = 'san.se')
+summary(geefit3)
+QIC(geefit3)
+anova(geefit, geefit2, geefit3)
+sf.test(geefit2$residuals)
+lillie.test(geefit2$residuals)
 
 
-# 线性混合模型, 考虑不同患者的随机截距效应
-model_lmer <- lmer(score ~ 1 + time*class + (1|`Patient ID`),
-                         data = df_bar
+# 线性混合模型, 考虑不同患者的随机截距效应,主效应间有交互效应
+model_lmer <- lmer(score ~ 1 + time*class + (1|`PatientID`),
+                         data = df_bar2
                    )
 performance::check_model(model_lmer)
 summary(model_lmer)
 performance::icc(model_lmer)
+report::report(model_lmer)
+
+model_lmer2 <- lmer(score ~ (1|`PatientID`),
+                   data = df_bar2
+)
+summary(model_lmer2)
 
 
 ## plot
