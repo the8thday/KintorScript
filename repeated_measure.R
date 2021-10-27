@@ -27,6 +27,7 @@ library(ggstatsplot)
 library(geepack)
 library(lme4)
 library(lmerTest)
+library(ez)
 # library(WRS2) # to keep the outliers in the data and perform robust ANOVA test using the WRS2 package
 
 
@@ -71,7 +72,7 @@ res.aov <- anova_test(data = long_data, dv = score, wid = PatientID, within = ti
               ))
 
 # use aov & post-hoc analysis
-aov.res <- aov(score ~ time + Error(`PatientID`/time),
+aov.res <- aov(score ~ time + Error(PatientID/time),
                data = long_data)
 report::report(aov.res)
 summary(aov.res)
@@ -89,6 +90,7 @@ pwc <- long_data %>%
 
 # friedman test
 (res.fried <- long_data %>% friedman_test(score ~ time | PatientID))
+long_data %>% friedman_effsize(score ~ time | PatientID)
 res.fried %>%
   write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_friedman.txt'),
               delim = '\t'
@@ -221,6 +223,8 @@ fit <- aov(score ~ class * time + Error(`Patient ID`/time),
 # report::report(fit)
 summary(fit)
 anova_summary(fit)
+parameters::model_parameters(fit)
+effectsize::eta_squared(fit)
 
 # 协方差分析,ANCOVA
 aov_xie2 <- aov(score ~ AGE + time*class, data = df_bar) # 协变量写在因子前面

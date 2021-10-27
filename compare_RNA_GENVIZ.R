@@ -89,7 +89,8 @@ M <- all_three %>%
   filter(!str_detect(GeneSymbol_R2R4, 'Rik$')) %>%
   column_to_rownames('GeneSymbol_R2R4')
 
-pdf("/Users/congliu/OneDrive/kintor/Daily_Work/all_three_2.pdf",
+pdf("/Users/congliu/OneDrive/kintor/Daily_Work/
+    all_three_2.pdf",
     width=8,height=8)
 Heatmap(M,
         name = 'logFC',
@@ -658,6 +659,23 @@ for(i in seq_along(i_gene)){
 
 
 
+
+
+
+
+
+
+
+
+
+# heatmap by FPKM ---------------------------------------------------------
+
+geneCount <- read_delim(countfile, delim = "\t") %>%
+  dplyr::select(!ends_with("FPKM")) %>%
+  dplyr::select(-`Exonic.gene.sizes`)
+geneCount <- geneCount[, -c((dim(geneCount)[2] - 9):(dim(geneCount)[2]))] %>%
+  dplyr::select(`gene_id`, any_of(rownames(sampleGroup))) %>%
+  column_to_rownames("gene_id")
 
 
 

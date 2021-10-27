@@ -12,7 +12,7 @@ my_cmax <- readxl::read_excel('D:/GT90001_长毒data.xlsx',
                               col_names = F
                               )
 
-my_auc <- readxl::read_excel('D:/GT90001_长毒data.xlsx', 
+my_auc <- readxl::read_excel('D:/GT90001_长毒data.xlsx',
                               sheet = 'Sheet3',
                              col_names = F
                               )
@@ -21,9 +21,9 @@ nms <- LETTERS[1:13]
 names(my_auc) <- nms
 names(my_cmax) <- nms
 
-foo <- my_auc %>% unite('key', c(B,C)) %>% select(-A) %>% 
-  column_to_rownames('key') %>% t() %>% 
-  as_tibble() %>% 
+foo <- my_auc %>% unite('key', c(B,C)) %>% select(-A) %>%
+  column_to_rownames('key') %>% t() %>%
+  as_tibble() %>%
   mutate(day1R=Day1_GT90001C/Day1_GT90001N,
          day29R=Day29_GT90001C/Day29_GT90001N,
          day85R=Day85_GT90001C/Day85_GT90001N
@@ -34,7 +34,7 @@ psych::geometric.mean(foo$day85R)
 mean(foo$day85R)
 
 
-m1 <- lm(foo$Day1_GT90001C~foo$Day1_GT90001N, data = foo)
+m1 <- lm(Day1_GT90001C~Day1_GT90001N, data = foo)
 summary(m1)
 anova(m1)
 confint(m1, level = 0.95)
@@ -80,9 +80,9 @@ ggplot(foo, aes(x=Day1_GT90001C, y=Day1_GT90001N)) +
 
 # cmax --------------------------------------------------------------------
 
-bar <- my_cmax %>% unite('key', c(B,C)) %>% select(-A) %>% 
-  column_to_rownames('key') %>% t() %>% 
-  as_tibble() %>% 
+bar <- my_cmax %>% unite('key', c(B,C)) %>% select(-A) %>%
+  column_to_rownames('key') %>% t() %>%
+  as_tibble() %>%
   mutate(day1R=Day1_GT90001C/Day1_GT90001N,
          day29R=Day29_GT90001C/Day29_GT90001N,
          day85R=Day85_GT90001C/Day85_GT90001N
@@ -137,7 +137,7 @@ ggplot(bar, aes(x=Day1_GT90001C, y=Day1_GT90001N)) +
 library(pairwiseCI)
 
 pairwiseCI(days~1, data=metadata, alternative = "two.sided",
-           conf.level = 0.95, 
+           conf.level = 0.95,
            method ="Median.diff" #HL.diff
            )
 Rmisc::CI(tfre$DMSO_1) # 均值
@@ -171,7 +171,7 @@ boot.ci(Mboot,
         conf = 0.95,
         type = c("norm", "basic" ,"perc", "bca")
 )
-# 
+#
 DescTools::MedianCI(
   Data$Likert,
   conf.level = 0.95,
@@ -180,7 +180,7 @@ DescTools::MedianCI(
   R = 10000
 )
 
-# try do it 
+# try do it
 bootmed = apply(matrix(sample(x, rep=TRUE, 10^4*length(x)), nrow=10^4), 1, median)
 
 
