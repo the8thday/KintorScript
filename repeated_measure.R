@@ -33,8 +33,8 @@ library(ez)
 
 hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG')
 sex_list <- c('males', 'female')
-jisu_sheet <- 'ESR'
-sex <- 'males'
+jisu_sheet <- 'Estradiol'
+sex <- 'female'
 
 mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
                              sheet = jisu_sheet
@@ -47,6 +47,7 @@ mn_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Wo
   select(-BMI) %>%
   drop_na()
 
+#
 # 单变量重复资料 -----------------------------------------------------------------
 
 long_data <- mn_ESR %>%
@@ -163,7 +164,8 @@ df_bar <- mt_ESR %>%
     mn_ESR %>% mutate(class = 'Untreated')
   ) %>%
   pivot_longer(cols = -c(`Patient ID`, class, AGE), names_to = 'time', values_to = 'score') %>%
-  # convert_as_factor(class, time) %>%
+  # fct_relevel()
+  convert_as_factor(class, time) %>%
   drop_na()
 
 # outlier test & normality
@@ -239,7 +241,7 @@ df_bar2 <- df_bar %>%
   mutate(class=if_else(class=='Treated',1,0)) %>%
   convert_as_factor(PatientID, class, time)
 
-geefit <- geeglm(score ~ time + class,
+geefit <- geeglm(score ~ time + class,# only主效应
                id=`PatientID`,
                corstr='exchangeable',
                family="gaussian",
@@ -255,6 +257,10 @@ geefit2 <- geeglm(score ~ time * class,
                  family="gaussian",
                  data=df_bar2,
                  std.err = 'san.se')
+broom::tidy(geefit2) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_gee.txt'),
+              delim = '\t'
+              )
 summary(geefit2)
 QIC(geefit2)
 geefit3 <- geeglm(score ~ time * class + AGE,
@@ -263,11 +269,28 @@ geefit3 <- geeglm(score ~ time * class + AGE,
                   family="gaussian",
                   data=df_bar2,
                   std.err = 'san.se')
+broom::tidy(geefit3) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge.txt'),
+              delim = '\t'
+  )
 summary(geefit3)
 QIC(geefit3)
-anova(geefit, geefit2, geefit3)
+anova(geefit2, geefit3)
 sf.test(geefit2$residuals)
 lillie.test(geefit2$residuals)
+
+geefit4 <- geeglm(score ~ time * class * AGE,
+                  id=interaction(time, `PatientID`),
+                  corstr='exchangeable',
+                  family="gaussian",
+                  data=df_bar2,
+                  std.err = 'san.se')
+summary(geefit4)
+(broom::tidy(geefit4) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge2.txt'),
+              delim = '\t'
+  ))
+anova(geefit3, geefit4)
 
 
 # 线性混合模型, 考虑不同患者的随机截距效应,主效应间有交互效应
@@ -335,37 +358,25 @@ ggpubr::ggbarplot(data = df_bar,
                   )
 
 
-
-
-
-
-
-
-
-
 # minus baseline ----------------------------------------------------------
 
 df2 <- mt_ESR %>%
+  mutate(class = 'Treated') %>%
+  bind_rows(
+    mn_ESR %>% mutate(class = 'Untreated')
+  ) %>%
   mutate(Day1 = `Day 1`-`Day 0`,
          Day7 = `Day 7`-`Day 0`
          ) %>%
   rename('PatientID'='Patient ID') %>%
-  pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`),
+  pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`, class),
                names_to = 'time',
                values_to = 'score'
   ) %>%
   convert_as_factor(PatientID, time)
 
-
-res.aov <- anova_test(data = df2,
-                      dv = score,
-                      wid = PatientID,
-                      within = time,
-                      # covariate = `Day 0`
-                      )
-get_anova_table(res.aov)
-
 pwc <- df2 %>%
+  group_by(class) %>%
   pairwise_t_test(
     score ~ time,
     paired = TRUE,
@@ -373,5 +384,58 @@ pwc <- df2 %>%
   )
 pwc
 
+pwc2 <- df2 %>%
+  group_by(time) %>%
+  pairwise_t_test(
+    score ~ class,
+    paired = FALSE,
+    p.adjust.method = "bonferroni"
+  )
+pwc2
 
+df2 %>%
+  group_by(time) %>%
+  shapiro_test(score)
+
+pwc3 <- df2 %>%
+  group_by(time) %>%
+  wilcox_test(
+    score ~ class,
+    paired = FALSE,
+    p.adjust.method = "bonferroni"
+  )
+(pwc3 %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_pairewise.txt'),
+              delim = '\t'
+  ))
+
+
+fit2 <- lm(score ~ time + AGE,
+           data = df2 %>% filter(class=='Treated')
+           )
+parameters::parameters(fit2)
+
+
+df3 <- mt_ESR %>%
+  mutate(class = 'Treated') %>%
+  bind_rows(
+    mn_ESR %>% mutate(class = 'Untreated')
+  ) %>%
+  pivot_longer(cols = -c(`Patient ID`, class, AGE), names_to = 'time', values_to = 'score') %>%
+  # fct_relevel()
+  convert_as_factor(class, time) %>%
+  drop_na()
+geefit5 <- geeglm(score ~ time * class + AGE,
+                  id=interaction(time, `PatientID`),
+                  corstr='exchangeable',
+                  family="gaussian",
+                  data=df2,
+                  std.err = 'san.se')
+summary(geefit5)
+QIC(geefit5)
+
+(broom::tidy(geefit5) %>%
+    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge5.txt'),
+                delim = '\t'
+    ))
 

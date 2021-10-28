@@ -670,12 +670,149 @@ for(i in seq_along(i_gene)){
 
 # heatmap by FPKM ---------------------------------------------------------
 
-geneCount <- read_delim(countfile, delim = "\t") %>%
-  dplyr::select(!ends_with("FPKM")) %>%
-  dplyr::select(-`Exonic.gene.sizes`)
-geneCount <- geneCount[, -c((dim(geneCount)[2] - 9):(dim(geneCount)[2]))] %>%
-  dplyr::select(`gene_id`, any_of(rownames(sampleGroup))) %>%
-  column_to_rownames("gene_id")
+i_gene <- c(
+  "IL1a",
+  "IL1RA",
+  "IL1b",
+  "IL2",
+  "IL4",
+  "IL5",
+  "IL6",
+  "IL7",
+  "IL9",
+  "IL10",
+  "IL12b",
+  "IL13",
+  "IL15",
+  "IL17A",
+  "IL18",
+  "IL21",
+  "IL22",
+  "IL23a",
+  "IL27",
+  "IL31",
+  "IFNa",
+  "IFNg",
+  "TNF",
+  "CCL2",
+  "CCL3",
+  "CCL4",
+  "CCL5",
+  "CCL6",
+  "CCL7",
+  "CCL22",
+  "CCL11",
+  "CCL19",
+  "CCL20",
+  "CCL27",
+  "CXCL2",
+  "CXCL1",
+  "CXCL6",
+  "CXCL8",
+  "CXCL9",
+  "CXCL10",
+  "CXCL11",
+  "CXCL12",
+  "CXCL13",
+  "CXCL14",
+  "CXCL16",
+  "CXCL17",
+  "TNFb",
+  "NGFb",
+  "BDNF",
+  "EGF",
+  "FGF2",
+  "LIF",
+  "PDGFBB",
+  "PlGF1",
+  "SCF",
+  "VEGFA",
+  "VEGFD",
+  "BAFF",
+  "GCSF",
+  "GMCSF",
+  "MCSF",
+  "Csf1r",
+  "ICAM1",
+  "Csf1",
+  "CSF2",
+  "CSF3"
+) %>% str_to_upper()
+
+# all_fpkm <- read_delim(
+#   '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/06_GeneExpression/all.fpkm_anno.xls',
+#   delim = '\t'
+# )
+
+all_fpkm <- read_delim(
+  '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/06_GeneExpression/all.fpkm_anno.xls',
+  delim = '\t'
+)
+
+fpkmToTpm <- function(fpkm){
+  exp(log(fpkm) - log(sum(fpkm)) + log(1e6))
+}
+
+is.infinite.matrix <- function(x){
+  apply(x,2,is.infinite)
+}
+
+
+fpkm <- all_fpkm %>%
+  select(ends_with('_FPKM'),GeneSymbol) %>%
+  mutate(GeneSymbol = str_to_upper(GeneSymbol)) %>%
+  filter(GeneSymbol %in% i_gene) %>%
+  arrange(desc(`6_FPKM`))
+print(dim(fpkm))
+
+
+tpms <- apply(all_fpkm %>%
+                select(ends_with('_FPKM'),gene_id) %>%
+                column_to_rownames('gene_id'),
+              2,fpkmToTpm)
+
+
+M <- fpkm %>%
+  column_to_rownames('GeneSymbol')
+print(dim(M))
+
+M <- M[rowSums(M)>1,]
+
+m1 <- log2(M)
+is.na(m1) <- sapply(m1, is.infinite)
+m1[is.na(m1)]<-0
+
+m2 <- t(scale(t(M)))
+
+# ha <- columnAnnotation(bar = anno_barplot(final_data$days))
+
+# pdf()
+Heatmap(m1,
+        name = 'log2(FPKM+1)',
+        na_col = '#E6E6FA',
+        border_gp = gpar(col = 'black'),
+        show_row_dend = T,
+        show_column_dend = F,
+        cluster_columns = F,
+        cluster_rows = F,
+        clustering_distance_columns = 'euclidean',
+        clustering_distance_rows = 'euclidean',
+        clustering_method_rows = 'complete',
+        clustering_method_columns = 'complete',
+        # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
+        col = circlize::colorRamp2(c(0,16), c("white", "#C00000")),
+        width = ncol(M)*unit(8, "mm"),
+        # height = nrow(M)*unit(6, "mm"),
+        # top_annotation = ha,
+        column_names_rot = 90,
+        show_column_names = T,
+        # column_names_gp = gpar(fontsize=1)
+)
+
+dev.off()
+
+
+
 
 
 
