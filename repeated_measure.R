@@ -30,11 +30,20 @@ library(lmerTest)
 library(ez)
 # library(WRS2) # to keep the outliers in the data and perform robust ANOVA test using the WRS2 package
 
+rm.out <- function(x){x[!x %in% boxplot.stats(x)$out]}
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
 
-hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG')
+hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG', 'Ddimer','usCRP')
 sex_list <- c('males', 'female')
-jisu_sheet <- 'Estradiol'
-sex <- 'female'
+jisu_sheet <- 'Ddimer'
+sex <- 'males'
 
 mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
                              sheet = jisu_sheet
@@ -47,22 +56,26 @@ mn_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Wo
   select(-BMI) %>%
   drop_na()
 
+mt_ESR <- mt_ESR %>% mutate(across(where(is.double), remove_outliers))
+mn_ESR <- mn_ESR %>% mutate(across(where(is.double), remove_outliers))
+
 #
 # 单变量重复资料 -----------------------------------------------------------------
 
-long_data <- mn_ESR %>%
+long_data <- mt_ESR %>%
   rename('PatientID'='Patient ID') %>%
   pivot_longer(cols = -c(`PatientID`, AGE),
                names_to = 'time',
                values_to = 'score'
                ) %>%
-  drop_na() %>%
+  # drop_na() %>%
   convert_as_factor(PatientID, time)
 
 # 检验是否符合anovar分析
 long_data %>% group_by(time) %>% identify_outliers(score)
 long_data %>% group_by(time) %>% shapiro_test(score)
 long_data %>% levene_test(score ~ time)
+
 
 aa <- long_data %>%
   anova_test(score ~ time + Error(`PatientID`/time)) # one way repeated measure ANOVA
@@ -121,10 +134,10 @@ long_data %>%  ggplot(aes(x = time, y = score, color = time, fill = time)) +
   theme_prism(base_size = 14) +
   scale_colour_prism(palette = "floral") +
   scale_fill_prism(palette = "floral") +
-  geom_signif(
-    y_position = c(130, 130, 130), xmin = c(0.8, 0.8, 2.8), xmax = c(1.2, 3.2, 3.2),
-    annotation = c("*", "NS", "NS"), tip_length = 0
-  )
+  # geom_signif(
+  #   y_position = c(130, 130, 130), xmin = c(0.8, 0.8, 2.8), xmax = c(1.2, 3.2, 3.2),
+  #   annotation = c("*", "NS", "NS"), tip_length = 0
+  # )
   geom_signif(
     comparisons = list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
     map_signif_level = TRUE,
@@ -146,12 +159,13 @@ ggboxplot(
   y = 'score',
   fill = 'time',
   palette = c("#00AFBB", "#E7B800", "#FC4E07"),
-) + stat_compare_means(comparisons =list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
+) +
+  stat_compare_means(method = 'anova', label.y =101) +
+  stat_compare_means(comparisons =list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
                        method = 'wilcox.test',
                        paired = TRUE,
                        aes(label = "p.signif")
-                       )+
-  stat_compare_means(label.y =101)
+                       )
 
 
 #
@@ -343,19 +357,12 @@ df_bar %>%
   ggtitle(glue::glue('{jisu_sheet} Treated VS Untreated'))
 
 
-ggpubr::ggbarplot(data = df_bar,
-                  x = 'time',
-                  y = 'score',
-                  fill = 'class',
-                  add = 'mean_se',
-                  palette = 'jco',
-                  position = position_dodge()
-                  ) +
-  stat_compare_means(comparisons =list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
-                                         method = 'wilcox.test',
-                                         paired = TRUE,
-                                         aes(label = "p.signif")
-                  )
+ggpubr::ggboxplot(
+  data = df_bar,
+  x = 'time',
+  y = 'score',
+  fill = 'class'
+)
 
 
 # minus baseline ----------------------------------------------------------
@@ -373,8 +380,18 @@ df2 <- mt_ESR %>%
                names_to = 'time',
                values_to = 'score'
   ) %>%
-  convert_as_factor(PatientID, time)
+  arrange(PatientID) %>%
+  convert_as_factor(PatientID, time, class)
+df2$class <- fct_relevel(df2$class, 'Untreated')
 
+# test normality
+df2 %>%
+  group_by(time) %>%
+  shapiro_test(score)
+df2 %>% levene_test(score ~ time)
+df2 %>% group_by(time) %>% identify_outliers(score)
+
+# basic statistic
 pwc <- df2 %>%
   group_by(class) %>%
   pairwise_t_test(
@@ -393,10 +410,6 @@ pwc2 <- df2 %>%
   )
 pwc2
 
-df2 %>%
-  group_by(time) %>%
-  shapiro_test(score)
-
 pwc3 <- df2 %>%
   group_by(time) %>%
   wilcox_test(
@@ -409,11 +422,59 @@ pwc3 <- df2 %>%
               delim = '\t'
   ))
 
+pwc4 <- df2 %>%
+  group_by(class) %>%
+  wilcox_test(
+    score ~ time,
+    paired = TRUE,
+    p.adjust.method = "bonferroni"
+  )
+(pwc4 %>%
+    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_pairwilcox.txt'),
+                delim = '\t'
+    ))
+# plot
+ggpubr::ggbarplot(data = df2,
+                  x = 'time',
+                  y = 'score',
+                  fill = 'class',
+                  add = 'mean_se',
+                  # error.plot = "upper_errorbar",
+                  palette = 'jco',
+                  position = position_dodge()
+) +
+  geom_signif(
+    y_position = c(500, 1500), xmin = c(0.8, 1.8), xmax = c(1.2, 2.2),
+    annotation = c("**", "***"), tip_length = 0
+  ) +
+  ggtitle(glue::glue('{jisu_sheet} Treated VS Untreated'))
 
-fit2 <- lm(score ~ time + AGE,
-           data = df2 %>% filter(class=='Treated')
-           )
-parameters::parameters(fit2)
+
+## gee analysis
+# only 主效应
+geefit_main <- geeglm(
+  score ~ time + class,
+  id=`PatientID`,
+  corstr='exchangeable',
+  family="gaussian",
+  data=df2,
+  std.err = 'san.se'
+)
+summary(geefit_main)
+
+
+geefit6 <- geeglm(score ~ time * class + `Day 0` + AGE,
+                  id=`PatientID`,
+                  corstr='exchangeable',
+                  family="gaussian",
+                  data=df2,
+                  std.err = 'san.se')
+summary(geefit6)
+QIC(geefit6)
+(broom::tidy(geefit6) %>%
+    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge6.txt'),
+                delim = '\t'
+    ))
 
 
 df3 <- mt_ESR %>%
@@ -421,15 +482,18 @@ df3 <- mt_ESR %>%
   bind_rows(
     mn_ESR %>% mutate(class = 'Untreated')
   ) %>%
-  pivot_longer(cols = -c(`Patient ID`, class, AGE), names_to = 'time', values_to = 'score') %>%
-  # fct_relevel()
-  convert_as_factor(class, time) %>%
+  rename('PatientID'='Patient ID') %>%
+  pivot_longer(cols = -c(`PatientID`, `Day 0`, class, AGE), names_to = 'time', values_to = 'score') %>%
+  arrange(PatientID) %>%
+  convert_as_factor(PatientID, time, class) %>%
   drop_na()
-geefit5 <- geeglm(score ~ time * class + AGE,
-                  id=interaction(time, `PatientID`),
+df3$class <- fct_relevel(df3$class, 'Untreated')
+
+geefit5 <- geeglm(score ~ time * class + `Day 0` + AGE,
+                  id=PatientID,
                   corstr='exchangeable',
                   family="gaussian",
-                  data=df2,
+                  data=df3,
                   std.err = 'san.se')
 summary(geefit5)
 QIC(geefit5)
@@ -438,4 +502,114 @@ QIC(geefit5)
     write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge5.txt'),
                 delim = '\t'
     ))
+
+
+
+# just for plot -----------------------------------------------------------
+
+long_data <- mt_ESR %>%
+  rename('PatientID'='Patient ID') %>%
+  pivot_longer(cols = -c(`PatientID`, AGE),
+               names_to = 'time',
+               values_to = 'score'
+  ) %>%
+  # drop_na() %>%
+  convert_as_factor(PatientID, time)
+
+# plot
+long_data %>%  ggplot(aes(x = time, y = score, color = time, fill = time)) +
+  geom_boxplot(na.rm = TRUE,
+               # outlier.shape = NA
+  ) +
+  ggtitle(glue::glue('{sex} {jisu_sheet}')) +
+  theme_prism(base_size = 14) +
+  scale_colour_prism(palette = "floral") +
+  scale_fill_prism(palette = "floral") +
+  # geom_signif(
+  #   y_position = c(130, 130, 130), xmin = c(0.8, 0.8, 2.8), xmax = c(1.2, 3.2, 3.2),
+  #   annotation = c("*", "NS", "NS"), tip_length = 0
+  # )
+  geom_signif(
+    comparisons = list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
+    map_signif_level = TRUE,
+    textsize = 4,
+    test = "wilcox.test",
+    test.args = list(paired = TRUE),
+    vjust = 0.2
+  )
+
+
+# for paired plot
+hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG', 'Ddimer','usCRP')
+sex_list <- c('males', 'female')
+sex <- 'female'
+
+for(i in hormones){
+  jisu_sheet <- 'Ddimer'
+  mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
+                               sheet = i
+  ) %>%
+    select(-BMI) %>%
+    drop_na()
+  mn_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_untreated.xlsx'),
+                               sheet = i
+  ) %>%
+    select(-BMI) %>%
+    drop_na()
+
+  mt_ESR <- mt_ESR %>% mutate(across(where(is.double), remove_outliers))
+  mn_ESR <- mn_ESR %>% mutate(across(where(is.double), remove_outliers))
+
+  df_bar <- mt_ESR %>%
+    mutate(class = 'Treated') %>%
+    bind_rows(
+      mn_ESR %>% mutate(class = 'Untreated')
+    ) %>%
+    pivot_longer(cols = -c(`Patient ID`, class, AGE), names_to = 'time', values_to = 'score') %>%
+    convert_as_factor(class, time)
+    # drop_na()
+
+  ## plot
+  three_p <- df_bar %>% group_by(time) %>%
+    wilcox_test(score ~ class) %>% pull(p)
+
+  print(c(glue::glue('p_0 P value: {three_p[1]}'),
+          glue::glue('p_1 P value: {three_p[2]}'),
+          glue::glue('p_7 P value: {three_p[3]}')
+  ))
+
+
+  p <- ggpubr::ggboxplot(
+    data = df_bar,
+    x = 'time',
+    y = 'score',
+    fill = 'class',
+    facet.by = "class",
+    palette = "lancet",
+    title = glue::glue('{sex} {i}'),
+    legend = "right",
+    ggtheme = ggprism::theme_prism()
+  ) + stat_compare_means(comparisons =list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
+                         method = 'wilcox.test',
+                         paired = TRUE,
+                         label = "p.signif"
+  )
+
+  ggsave(filename = glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{i}_facet.pdf'),
+         plot = p,
+         width = 15,
+         height = 10
+  )
+}
+
+
+
+ggpubr::ggboxplot(
+  data = df_bar,
+  x = 'time',
+  y = 'score',
+  fill = 'class',
+  palette = "lancet"
+) +
+  stat_compare_means(aes(group = class), label = 'p.format')
 
