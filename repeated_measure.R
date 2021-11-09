@@ -40,10 +40,12 @@ remove_outliers <- function(x, na.rm = TRUE, ...) {
   y
 }
 
-hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG', 'Ddimer','usCRP')
+hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG', 'Ddimer','usCRP',
+              'NEUTROPHILS','LYMPHOCYTES','EOSINOPHILS','PLATELETS','FERRITIN','Fibrinogen','NL_ratio'
+              )
 sex_list <- c('males', 'female')
-jisu_sheet <- 'Ddimer'
-sex <- 'males'
+jisu_sheet <- 'LYMPHOCYTES'
+sex <- 'female'
 
 mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
                              sheet = jisu_sheet
@@ -275,6 +277,10 @@ broom::tidy(geefit2) %>%
   write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_gee.txt'),
               delim = '\t'
               )
+anova(geefit2) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAnova.txt'),
+              delim = '\t'
+  )
 summary(geefit2)
 QIC(geefit2)
 geefit3 <- geeglm(score ~ time * class + AGE,
@@ -285,6 +291,10 @@ geefit3 <- geeglm(score ~ time * class + AGE,
                   std.err = 'san.se')
 broom::tidy(geefit3) %>%
   write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge.txt'),
+              delim = '\t'
+  )
+anova(geefit3) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAgeAnova.txt'),
               delim = '\t'
   )
 summary(geefit3)
@@ -304,6 +314,10 @@ summary(geefit4)
   write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge2.txt'),
               delim = '\t'
   ))
+anova(geefit4) %>%
+  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAnova4.txt'),
+              delim = '\t'
+  )
 anova(geefit3, geefit4)
 
 
@@ -367,22 +381,153 @@ ggpubr::ggboxplot(
 
 # minus baseline ----------------------------------------------------------
 
-df2 <- mt_ESR %>%
-  mutate(class = 'Treated') %>%
-  bind_rows(
-    mn_ESR %>% mutate(class = 'Untreated')
+hormones <- c(
+              'NEUTROPHILS','LYMPHOCYTES','EOSINOPHILS','PLATELETS','FERRITIN','Fibrinogen','NL_ratio'
+)
+
+sex <- 'female'
+
+get_minus <- function(i, sex){
+  mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
+                               sheet = i
   ) %>%
-  mutate(Day1 = `Day 1`-`Day 0`,
-         Day7 = `Day 7`-`Day 0`
-         ) %>%
-  rename('PatientID'='Patient ID') %>%
-  pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`, class),
-               names_to = 'time',
-               values_to = 'score'
+    select(-BMI) %>%
+    drop_na()
+  mn_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_untreated.xlsx'),
+                               sheet = i
   ) %>%
-  arrange(PatientID) %>%
-  convert_as_factor(PatientID, time, class)
-df2$class <- fct_relevel(df2$class, 'Untreated')
+    select(-BMI) %>%
+    drop_na()
+
+  # mt_ESR <- mt_ESR %>% mutate(across(where(is.double), remove_outliers))
+  # mn_ESR <- mn_ESR %>% mutate(across(where(is.double), remove_outliers))
+
+  df2 <- mt_ESR %>%
+    mutate(class = 'Treated') %>%
+    bind_rows(
+      mn_ESR %>% mutate(class = 'Untreated')
+    ) %>%
+    mutate(Day1 = `Day 1`-`Day 0`,
+           Day7 = `Day 7`-`Day 0`
+    ) %>%
+    rename('PatientID'='Patient ID') %>%
+    pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`, class),
+                 names_to = 'time',
+                 values_to = 'score'
+    ) %>%
+    arrange(PatientID) %>%
+    convert_as_factor(PatientID, time, class)
+  df2$class <- fct_relevel(df2$class, 'Untreated')
+
+  pwc3 <- df2 %>%
+    group_by(time) %>%
+    wilcox_test(
+      score ~ class,
+      paired = FALSE,
+      p.adjust.method = "bonferroni"
+    )
+  (pwc3 %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_pairewise.txt'),
+                  delim = '\t'
+      ))
+
+  pwc4 <- df2 %>%
+    group_by(class) %>%
+    wilcox_test(
+      score ~ time,
+      paired = TRUE,
+      p.adjust.method = "bonferroni"
+    )
+  (pwc4 %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_pairwilcox.txt'),
+                  delim = '\t'
+      ))
+
+  # plot
+  kk <- df2 %>% group_by(time,class) %>% summarise(max_=max(score),
+                                                   mean_ = mean(score,na.rm = TRUE),
+                                                   sd_ = sd(score, na.rm = TRUE)
+  ) %>%
+    mutate(key = `mean_` + 0.5*`sd_`) %>%
+    group_by(time) %>% summarise(max_ = max(key))
+  kk_day1 <- (kk %>% pull(max_))[1]
+  kk_day7 <- (kk %>% pull(max_))[2]
+  p_day1 <- (pwc3 %>% pull(p))[1]
+  p_day7 <- (pwc3 %>% pull(p))[2]
+  pp <- ggpubr::ggbarplot(data = df2,
+                    x = 'time',
+                    y = 'score',
+                    fill = 'class',
+                    add = 'mean_se',
+                    # error.plot = "upper_errorbar",
+                    palette = 'jco',
+                    position = position_dodge()
+  ) +
+    # stat_compare_means(aes(group = class), label = 'p.format')
+    geom_signif(
+      y_position = c(kk_day1, kk_day7), xmin = c(0.8, 1.8), xmax = c(1.2, 2.2),
+      annotation = c(p_day1, p_day7), tip_length = 0
+    ) +
+    ggtitle(glue::glue('{sex}_{i} Treated VS Untreated'))
+
+  ggsave(filename = glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_bar.pdf'),
+         plot = pp,
+         width = 10,
+         height = 10)
+
+  geefit6 <- geeglm(score ~ time * class + `Day 0` + AGE,
+                    id=`PatientID`,
+                    corstr='exchangeable',
+                    family="gaussian",
+                    data=df2,
+                    std.err = 'san.se')
+  summary(geefit6)
+  QIC(geefit6)
+  (broom::tidy(geefit6) %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_geeAge6.txt'),
+                  delim = '\t'
+      ))
+  (parameters::parameters(anova(geefit6)) %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_geeAnova6.txt'),
+                  delim = '\t'
+      ))
+
+
+  df3 <- mt_ESR %>%
+    mutate(class = 'Treated') %>%
+    bind_rows(
+      mn_ESR %>% mutate(class = 'Untreated')
+    ) %>%
+    rename('PatientID'='Patient ID') %>%
+    pivot_longer(cols = -c(`PatientID`, `Day 0`, class, AGE), names_to = 'time', values_to = 'score') %>%
+    arrange(PatientID) %>%
+    convert_as_factor(PatientID, time, class) %>%
+    drop_na()
+  df3$class <- fct_relevel(df3$class, 'Untreated')
+
+  geefit5 <- geeglm(score ~ time * class + `Day 0` + AGE,
+                    id=PatientID,
+                    corstr='exchangeable',
+                    family="gaussian",
+                    data=df3,
+                    std.err = 'san.se')
+  summary(geefit5)
+  QIC(geefit5)
+
+  (broom::tidy(geefit5) %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_geeAge5.txt'),
+                  delim = '\t'
+      ))
+  (parameters::parameters(anova(geefit5)) %>%
+      write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_geeAnova5.txt'),
+                  delim = '\t'
+      ))
+}
+
+for (i in hormones) {
+  get_minus(i = i, sex = sex)
+}
+
 
 # test normality
 df2 %>%
@@ -410,45 +555,6 @@ pwc2 <- df2 %>%
   )
 pwc2
 
-pwc3 <- df2 %>%
-  group_by(time) %>%
-  wilcox_test(
-    score ~ class,
-    paired = FALSE,
-    p.adjust.method = "bonferroni"
-  )
-(pwc3 %>%
-  write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_pairewise.txt'),
-              delim = '\t'
-  ))
-
-pwc4 <- df2 %>%
-  group_by(class) %>%
-  wilcox_test(
-    score ~ time,
-    paired = TRUE,
-    p.adjust.method = "bonferroni"
-  )
-(pwc4 %>%
-    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_pairwilcox.txt'),
-                delim = '\t'
-    ))
-# plot
-ggpubr::ggbarplot(data = df2,
-                  x = 'time',
-                  y = 'score',
-                  fill = 'class',
-                  add = 'mean_se',
-                  # error.plot = "upper_errorbar",
-                  palette = 'jco',
-                  position = position_dodge()
-) +
-  geom_signif(
-    y_position = c(500, 1500), xmin = c(0.8, 1.8), xmax = c(1.2, 2.2),
-    annotation = c("**", "***"), tip_length = 0
-  ) +
-  ggtitle(glue::glue('{jisu_sheet} Treated VS Untreated'))
-
 
 ## gee analysis
 # only 主效应
@@ -461,48 +567,7 @@ geefit_main <- geeglm(
   std.err = 'san.se'
 )
 summary(geefit_main)
-
-
-geefit6 <- geeglm(score ~ time * class + `Day 0` + AGE,
-                  id=`PatientID`,
-                  corstr='exchangeable',
-                  family="gaussian",
-                  data=df2,
-                  std.err = 'san.se')
-summary(geefit6)
-QIC(geefit6)
-(broom::tidy(geefit6) %>%
-    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge6.txt'),
-                delim = '\t'
-    ))
-
-
-df3 <- mt_ESR %>%
-  mutate(class = 'Treated') %>%
-  bind_rows(
-    mn_ESR %>% mutate(class = 'Untreated')
-  ) %>%
-  rename('PatientID'='Patient ID') %>%
-  pivot_longer(cols = -c(`PatientID`, `Day 0`, class, AGE), names_to = 'time', values_to = 'score') %>%
-  arrange(PatientID) %>%
-  convert_as_factor(PatientID, time, class) %>%
-  drop_na()
-df3$class <- fct_relevel(df3$class, 'Untreated')
-
-geefit5 <- geeglm(score ~ time * class + `Day 0` + AGE,
-                  id=PatientID,
-                  corstr='exchangeable',
-                  family="gaussian",
-                  data=df3,
-                  std.err = 'san.se')
-summary(geefit5)
-QIC(geefit5)
-
-(broom::tidy(geefit5) %>%
-    write_delim(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{jisu_sheet}_geeAge5.txt'),
-                delim = '\t'
-    ))
-
+anova(geefit_main)
 
 
 # just for plot -----------------------------------------------------------
@@ -540,12 +605,11 @@ long_data %>%  ggplot(aes(x = time, y = score, color = time, fill = time)) +
 
 
 # for paired plot
-hormones <- c('ESR', 'DHT', 'testos', 'Estradiol', 'SHBG', 'Ddimer','usCRP')
+hormones <- c('NEUTROPHILS','LYMPHOCYTES','EOSINOPHILS','PLATELETS','FERRITIN','Fibrinogen','NL_ratio')
 sex_list <- c('males', 'female')
 sex <- 'female'
 
 for(i in hormones){
-  jisu_sheet <- 'Ddimer'
   mt_ESR <- readxl::read_excel(glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_treated.xlsx'),
                                sheet = i
   ) %>%
@@ -586,7 +650,7 @@ for(i in hormones){
     fill = 'class',
     facet.by = "class",
     palette = "lancet",
-    title = glue::glue('{sex} {i}'),
+    title = glue::glue('{sex} {i} rm outlier'),
     legend = "right",
     ggtheme = ggprism::theme_prism()
   ) + stat_compare_means(comparisons =list(c("Day 0", "Day 1"), c("Day 0", "Day 7"), c('Day 1', 'Day 7')),
@@ -595,7 +659,7 @@ for(i in hormones){
                          label = "p.signif"
   )
 
-  ggsave(filename = glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/{sex}_{i}_facet.pdf'),
+  ggsave(filename = glue::glue('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_hormone/{sex}_{i}_rm.pdf'),
          plot = p,
          width = 15,
          height = 10
@@ -605,11 +669,28 @@ for(i in hormones){
 
 
 ggpubr::ggboxplot(
-  data = df_bar,
+  data = df2,
   x = 'time',
   y = 'score',
   fill = 'class',
   palette = "lancet"
 ) +
   stat_compare_means(aes(group = class), label = 'p.format')
+
+
+ggpubr::ggline(
+  data = df_bar,
+  x = 'time',
+  y = 'score',
+  add = 'mean_se',
+  color = 'class',
+  palette = "lancet"
+) +
+  stat_compare_means(aes(group = class), label = 'p.format',
+                     label.y = c(4,4,7)
+                     )
+
+
+
+
 
