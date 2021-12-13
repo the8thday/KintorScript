@@ -75,4 +75,35 @@ find ./*/spades -name "scaffolds.fasta" | grep -v 'K' | awk '{split($1,a,"/"); p
 find ./*/spades -name "*.fna" -type f | awk '{split($1,a,"/"); print "sed -i ""'\''""1c >"a[2]"'\''"" "$1}'
 
 
+# run rna seq
+bash rna_pipe.sh /data/home/liuc/work/rna_test/5_combined_R1.fastq.gz /data/home/liuc/work/rna_test/5_combined_R2.fastq.gz /data/home/liuc/work/rna_test/ U5
+nohup bash rna_pipe.sh /data/home/liuc/work/rna_test/U6/6_combined_R1.fastq.gz \
+/data/home/liuc/work/rna_test/U6/6_combined_R2.fastq.gz /data/home/liuc/work/rna_test/U6 U6 &
+
+# use refgenie
+export REFGENIE='genome_config.yaml'
+refgenie init -c $REFGENIE
+refgenie listr
+refgenie pull hg38/salmon_sa_index
+refgenie pull hg38/salmon_partial_sa_index
+
+
+nohup salmon quant -l MU -i ~/Software/alias/hg38/salmon_partial_sa_index/default \
+--validateMappings \
+-p 12 \
+-1 ./cleandata/U5_r1.clean.fq.gz -2 ./cleandata/U5_r2.clean.fq.gz -o ./salmon/U5 &
+
+nohup salmon quant --gcBias -l MU -p 12 \
+--validateMappings \
+-i /data/home/liuc/Reference/RNA/salmon/salmon_index_all/salmon_index_all -g /data/home/liuc/Reference/RNA/salmon/GRCh38.primary_assembly.genome.fa \
+-1 ./cleandata/U6_r1.clean.fq.gz -2 ./cleandata/U6_r2.clean.fq.gz -o ./salmon_all &
+
+
+featureCounts -T 8 -p \
+-t exon -g gene_id \
+-a  -o ./featureCounts_all.txt ./*/bam/*.bam \
+1>all.featureCounts.sh.out 2>all.featureCounts.sh.err
+
+
+
 

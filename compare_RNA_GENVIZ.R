@@ -1,15 +1,26 @@
 library(tidyverse)
 library(ComplexHeatmap)
 library(VennDiagram)
+library(pheatmap)
 options(BioC_mirror="https://mirrors.tuna.tsinghua.edu.cn/bioconductor")
 
 
-# compare DEGs ------------------------------------------------------------
+# compare DEGs RAW ------------------------------------------------------------
 
-path <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/08_DE'
+path <- '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse'
+outpath <- path
+cohortname <- 'mouse'
+save_pheatmap_pdf <- function(x, filename, width=10, height=10) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
 
 all_fpkm <- read_delim(
-  '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/06_GeneExpression/all.fpkm_anno.xls',
+  '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/all.fpkm_anno.xls',
   delim = '\t'
   )
 
@@ -21,18 +32,10 @@ R2R3 <- read_delim(file.path(path, 'Group_R-2-VS-R-3_DE_anno.xls'),
 R2R4 <- read_delim(file.path(path, 'Group_R-2-VS-R-4_DE_anno.xls'),
                    delim = '\t')
 
-i_gene <- Hmisc::Cs(IL1b,IL2, IL4, IL5, IL6, IL7, IL9, IL10, IL12,
-                    IL13, IL15, IL17A, IL18, IL21, IL22, IL23,IL27,IL31,
-                    FNA, IFNG, TNFA, CCL2, CCL3, CCL4,CCL11, CXCL1,CXCL8,
-                    CXCL9,CXCL10, CXCL12, CXCL13, TNFB, NGFb, BDNF, EGF, FGF2,
-                    LIF, PDGFBB,PlGF1,SCF,VEGFA,VEGFD, BAFF, GMCSF,GCSF
-                    ) %>% str_to_upper()
-
 R1R2 %>% mutate(GeneSymbol = str_to_upper(GeneSymbol)) %>%
   filter(str_detect(GeneSymbol, paste0('^',i_gene,collapse = '|'))) %>%
   filter(GeneSymbol %in% i_gene) %>%
   select(GeneSymbol, logFC)
-
 
 
 R1R2_sig <- read_delim(file.path(path, 'Group_R-1-VS-R-2_DE_significant_anno.xls'),
@@ -53,19 +56,19 @@ R1R2_R2R3 <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
   select(sort(names(.)))
 
-# R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R3.txt',
+# R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R1R2_R2R3.txt',
 #                           delim = '\t')
 
 
 R1R2_R2R4 <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R4_sig), by = 'geneID', suffix = c('_R1R2', '_R2R4')) %>%
   select(sort(names(.)))
-  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R1R2_R2R4.txt', delim = '\t')
+  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R1R2_R2R4.txt', delim = '\t')
 
 R2R3_R2R4 <- go_inter(R2R3_sig) %>%
   full_join(go_inter(R2R4_sig), by = 'geneID', suffix = c('_R2R3', '_R2R4')) %>%
   dplyr::select(sort(names(.)))
-  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/R2R3_R2R4.txt', delim = '\t')
+  # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R2R3_R2R4.txt', delim = '\t')
 
 # merge all three files
 foo <- go_inter(R2R4_sig) %>%
@@ -82,12 +85,38 @@ all_three <- go_inter(R1R2_sig) %>%
 M <- all_three %>%
   select(GeneSymbol_R1R2, GeneSymbol_R2R3, GeneSymbol_R2R4, logFC_R1R2, logFC_R2R3, logFC_R2R4) %>%
   filter(!is.na(GeneSymbol_R2R4)) %>%
+  # mutate(GeneSymbol_R2R4 = str_to_upper(GeneSymbol_R2R4)) %>%
+  # filter(GeneSymbol_R2R4 %in% i_gene) %>%
   arrange(desc(logFC_R1R2), desc(logFC_R2R4), desc(logFC_R2R3)) %>%
   filter(!is.na(GeneSymbol_R1R2)) %>%
   select(-GeneSymbol_R1R2, -GeneSymbol_R2R3) %>%
   filter(!str_detect(GeneSymbol_R2R4, '^Gm')) %>%
   filter(!str_detect(GeneSymbol_R2R4, 'Rik$')) %>%
+  dplyr::rename_with(.fn = ~str_extract(.x, 'R[0-9]R[0-9]'), .col=starts_with('logFC')) %>%
   column_to_rownames('GeneSymbol_R2R4')
+# M[is.na(M)] <- 0
+
+
+p_heat1 <- pheatmap::pheatmap(M,
+                             cluster_rows = FALSE,
+                             show_rownames = TRUE,
+                             cluster_cols = FALSE,
+                             clustering_method = "average",
+                             # scale = "row",
+                             cellwidth = 15,
+                             # cellheight = 15,
+                             fontsize_row = 8,
+                             border = FALSE,
+                             # na_col = 'grey'
+                             # annotation_col = anno
+)
+save_pheatmap_pdf(p_heat1,
+                  file.path(
+                    outpath,
+                    paste0("heatmap_diff_", cohortname, ".pdf")
+                  ),
+                  width = 10, height = 10
+)
 
 pdf("/Users/congliu/OneDrive/kintor/Daily_Work/
     all_three_2.pdf",
@@ -95,6 +124,7 @@ pdf("/Users/congliu/OneDrive/kintor/Daily_Work/
 Heatmap(M,
         name = 'logFC',
         col = circlize::colorRamp2(c(-10, 0, 10), c("navy", "white", "firebrick3")),
+        # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
         border_gp = gpar(col = 'black'),
         show_row_dend = F,
         show_column_dend = F,
@@ -114,13 +144,15 @@ Heatmap(M,
 dev.off()
 
 # venn plot
-venn_list <- list(R1R2_sig=R1R2_sig$geneID,
-                  R2R3_sig=R2R3_sig$geneID,
-                  R2R4_sig=R2R4_sig$geneID)
+g12 <- read_delim('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/paired/DESeq2_DEG_filtered_group12.txt',
+                  delim = '\t') %>% drop_na()
+g13 <- read_delim('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/DESeq2_DEG_filtered_group13.txt',
+                  delim = '\t') %>% drop_na()
+venn_list <- list(g12=g12$SYMBOL,g13=g13$SYMBOL)
 
 venn.plot <- venn.diagram(venn_list,
                           filename = '/Users/congliu/OneDrive/kintor/Daily_Work/RAW_venn.png',
-                          fill = c('red', 'green', 'blue'), alpha = 0.50,
+                          fill = c('red', 'green'), alpha = 0.50,
                           # cat.col = rep('black', 2),
                           # col = 'black',
                           col = "transparent",
@@ -132,12 +164,14 @@ venn.plot <- venn.diagram(venn_list,
                           # width = 880,
                           # resolution = 1000,
                           # compression = "lzw"
-)
+                          )
 
 
 ## -----U937--------------
 
-path <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/08_DE'
+path <- '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Human'
+outpath <- path
+cohortname <- 'U937'
 
 U5U6_sig <- read_delim(file.path(path, 'Group_U-5-VS-U-6_DE_significant_anno.xls'),
                        delim = '\t')
@@ -183,10 +217,35 @@ M <- all_three %>%
   select(GeneSymbol_U5U6, GeneSymbol_U6U7, GeneSymbol_U6U8,log2FoldChange_U5U6, log2FoldChange_U6U7, log2FoldChange_U6U8) %>%
   filter(!is.na(GeneSymbol_U6U8)) %>%
   filter(GeneSymbol_U6U8 != '-') %>%
+  mutate(GeneSymbol_U6U8 = str_to_upper(GeneSymbol_U6U8)) %>%
+  # filter(GeneSymbol_U6U8 %in% i_gene) %>%
   arrange(desc(log2FoldChange_U5U6), desc(log2FoldChange_U6U8), desc(log2FoldChange_U6U7)) %>%
   filter(GeneSymbol_U6U8 != 'DNAJC9-AS1') %>%
+  filter(!is.na(GeneSymbol_U5U6)) %>%
   select(-GeneSymbol_U6U7, -GeneSymbol_U5U6) %>%
+  dplyr::rename_with(.fn = ~str_extract(.x, 'U[0-9]U[0-9]'), .col=starts_with('log2FoldChange')) %>%
   column_to_rownames('GeneSymbol_U6U8')
+
+p_heat1 <- pheatmap::pheatmap(M,
+                              cluster_rows = FALSE,
+                              show_rownames = TRUE,
+                              cluster_cols = FALSE,
+                              clustering_method = "average",
+                              # scale = "row",
+                              cellwidth = 15,
+                              # cellheight = 15,
+                              fontsize_row = 3,
+                              border = FALSE,
+                              # na_col = 'grey'
+                              # annotation_col = anno
+)
+save_pheatmap_pdf(p_heat1,
+                  file.path(
+                    outpath,
+                    paste0("heatmap_diff_", cohortname, ".pdf")
+                  ),
+                  width = 10, height = 10
+)
 
 pdf("/Users/congliu/OneDrive/kintor/Daily_Work/three_groups_2.pdf",
     width=8,height=8)
@@ -246,12 +305,12 @@ library(org.Mm.eg.db)
 
 cohort <- 'R1R2_R2R4'
 
-genelist <- R1R2_R2R4 %>%
-  filter(!is.na(GeneSymbol_R2R4)) %>%
-  filter(!is.na(GeneSymbol_R1R2)) %>%
-  dplyr::select(geneID) %>%
-  distinct() %>%
-  pull(geneID)
+# genelist <- R1R2_R2R4 %>%
+#   filter(!is.na(GeneSymbol_R2R4)) %>%
+#   filter(!is.na(GeneSymbol_R1R2)) %>%
+#   dplyr::select(geneID) %>%
+#   distinct() %>%
+#   pull(geneID)
 
 # genelist <- U5U6_U6U8 %>%
 #   filter(!is.na(GeneSymbol_U6U8)) %>%
@@ -260,12 +319,14 @@ genelist <- R1R2_R2R4 %>%
 #   distinct() %>%
 #   pull(geneID)
 
-gene.df <- bitr(genelist,
-                fromType = 'ENSEMBL',
-                toType = c('ENTREZID', 'SYMBOL'),
-                OrgDb = org.Mm.eg.db,
-                drop = TRUE
+genelist <- R2R4_sig$geneID
+geneMap <- clusterProfiler::bitr(genelist,
+                                 fromType = "ENSEMBL",
+                                 toType = c("SYMBOL", "ENTREZID"),
+                                 OrgDb = "org.Mm.eg.db",
+                                 drop = TRUE
 )
+
 
 # go 富集分析
 enrich.go <- enrichGO(
@@ -274,12 +335,14 @@ enrich.go <- enrichGO(
   keyType = 'ENSEMBL',
   ont = 'BP',
   pAdjustMethod = 'BH',
-  pvalueCutoff = 1,
-  qvalueCutoff  = 1
+  pvalueCutoff = 0.05,
+  qvalueCutoff  = 0.2
 )
 # enrich.go@pvalueCutoff <- 1
 # enrich.go@qvalueCutoff <- 1
 
+enrich.go <- setReadable(enrich.go,
+                         OrgDb = org.Mm.eg.db)
 egosim <- simplify(enrich.go,
                    cutoff = 0.7,
                    by = 'p.adjust',
@@ -287,24 +350,24 @@ egosim <- simplify(enrich.go,
                    measure = 'Wang'
 )
 
-pp <- dotplot(enrich.go,
+pp <- dotplot(egosim,
               font.size = 12,
               color = 'p.adjust',
               showCategory=20,
-              title = 'GO(BP) Analysis'
+              title = glue::glue('{cohortname} GO(BP) Enrichment')
 ) +
-  # scale_color_gradient2() +
+  viridis::scale_color_viridis() +
   scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
 
-pp2 <- barplot(enrich.go,
+pp2 <- barplot(egosim,
                font.size = 12
 ) +
   scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
 
-(pp3 <- cnetplot(enrich.go,
+(pp3 <- cnetplot(egosim,
                  node_label = 'all'))
 
-ego2 <- enrichplot::pairwise_termsim(enrich.go)
+ego2 <- enrichplot::pairwise_termsim(egosim)
 (pp4 <- enrichplot::treeplot(ego2,
                              hclust_method = "ward.D"
 ))
@@ -324,29 +387,46 @@ ggsave(file = file.path(outpath, paste0(cohort, '_goTree.pdf')),
 
 # kegg
 kegg <- enrichKEGG(
-  gene = gene.df$ENTREZID,
+  gene = geneMap$ENTREZID,
   keyType = 'ncbi-geneid',
   organism = 'mmu',
   pAdjustMethod = 'fdr',
-  pvalueCutoff = 0.5,
-  qvalueCutoff = 0.5,
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2,
   use_internal_data = F
 )
-kegg@pvalueCutoff <- 1
-kegg@qvalueCutoff <- 1
+# kegg@pvalueCutoff <- 1
+# kegg@qvalueCutoff <- 1
 
 keggx <- setReadable(kegg, 'org.Mm.eg.db', 'ENTREZID')
 
-kegg_p <- barplot(kegg,
-                  font.size = 15,
-                  title = 'KEGG Analysis'
-)
+kegg_p <- clusterProfiler::dotplot(kegg,
+                                   font.size = 15,
+                                   title = glue::glue('{cohortname} KEGG Enrichment'),
+                                   showCategory = 20
+) +
+  scale_color_viridis() +
+  scale_y_discrete(labels = function(x) {
+    str_wrap(x, width = 40)
+  })
+
+kegg_p2 <- barplot(kegg,
+                   font.size = 8,
+                   showCategory = 20,
+                   title = glue::glue('{cohortname} KEGG Enrichment')
+) +
+  scale_fill_viridis() +
+  scale_y_discrete(labels = function(x) {
+    str_wrap(x, width = 40)
+  })
 write_delim(kegg@result,
-            file = file.path(outpath, paste0(cohort, '_KEGG.txt')), delim = '\t')
+            file = file.path(outpath, paste0(cohortname, '_KEGG.txt')), delim = '\t')
 write_delim(keggx@result,
-            file = file.path(outpath, paste0(cohort, '_KEGGX.txt')), delim = '\t')
-ggsave(file.path(outpath, paste0(cohort, '_KEGG.pdf')),
+            file = file.path(outpath, paste0(cohortname, '_KEGGX.txt')), delim = '\t')
+ggsave(file.path(outpath, paste0(cohortname, '_KEGG.pdf')),
        plot = kegg_p, width = 10, height = 10)
+ggsave(file.path(outpath, paste0(cohortname, '_KEGG_bar.pdf')),
+       plot = kegg_p2, width = 10, height = 10)
 
 # browseKEGG(kegg, pathID = 'hsa04080')
 
@@ -486,7 +566,7 @@ write_delim(gseKEGG.res@result,
 
 
 
-# GO KEGG --------------------------------------------------------------------
+# RAW GO KEGG intersect--------------------------------------------------------------------
 
 path2 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/09_GO'
 path3 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/10_KEGG'
@@ -574,7 +654,7 @@ find_gene2('R-1-VS-R-2', koid[1]) %>%
 
 
 
-# U937 GO KEGG ------------------------------------------------------------
+# U937 GO KEGG intersect------------------------------------------------------------
 
 path2 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/09_GO'
 path3 <- '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/10_KEGG'
@@ -671,81 +751,17 @@ for(i in seq_along(i_gene)){
 # heatmap by FPKM ---------------------------------------------------------
 
 i_gene <- c(
-  "IL1a",
-  "IL1RA",
-  "IL1b",
-  "IL2",
-  "IL4",
-  "IL5",
-  "IL6",
-  "IL7",
-  "IL9",
-  "IL10",
-  "IL12b",
-  "IL13",
-  "IL15",
-  "IL17A",
-  "IL18",
-  "IL21",
-  "IL22",
-  "IL23a",
-  "IL27",
-  "IL31",
-  "IFNa",
-  "IFNg",
-  "TNF",
-  "CCL2",
-  "CCL3",
-  "CCL4",
-  "CCL5",
-  "CCL6",
-  "CCL7",
-  "CCL22",
-  "CCL11",
-  "CCL19",
-  "CCL20",
-  "CCL27",
-  "CXCL2",
-  "CXCL1",
-  "CXCL6",
-  "CXCL8",
-  "CXCL9",
-  "CXCL10",
-  "CXCL11",
-  "CXCL12",
-  "CXCL13",
-  "CXCL14",
-  "CXCL16",
-  "CXCL17",
-  "TNFb",
-  "NGFb",
-  "BDNF",
-  "EGF",
-  "FGF2",
-  "LIF",
-  "PDGFBB",
-  "PlGF1",
-  "SCF",
-  "VEGFA",
-  "VEGFD",
-  "BAFF",
-  "GCSF",
-  "GMCSF",
-  "MCSF",
-  "Csf1r",
-  "ICAM1",
-  "Csf1",
-  "CSF2",
+  "IL1a","IL1RA","IL1b","IL2","IL4","IL5","IL6","IL7","IL9","IL10","IL12b","IL13","IL15","IL17A",
+  "IL18","IL21","IL22","IL23a","IL27","IL31","IFNa","IFNg","TNF","CCL2","CCL3","CCL4","CCL5","CCL6",
+  "CCL7","CCL22","CCL11","CCL19","CCL20","CCL27","CXCL2","CXCL1","CXCL6","CXCL8","CXCL9","CXCL10",
+  "CXCL11","CXCL12","CXCL13","CXCL14","CXCL16","CXCL17","TNFb","NGFb","BDNF","EGF","FGF2","LIF",
+  "PDGFBB","PlGF1","SCF","VEGFA","VEGFD","BAFF","GCSF","GMCSF","MCSF","Csf1r","ICAM1","Csf1","CSF2",
   "CSF3"
 ) %>% str_to_upper()
 
-# all_fpkm <- read_delim(
-#   '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Mouse/Report/Result/06_GeneExpression/all.fpkm_anno.xls',
-#   delim = '\t'
-# )
 
 all_fpkm <- read_delim(
-  '/Volumes/H500G-86/80-762814506/N2111843_80-762814506/Human/Report/Result/06_GeneExpression/all.fpkm_anno.xls',
+  '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Human/all.fpkm_anno.xls',
   delim = '\t'
 )
 
@@ -758,13 +774,26 @@ is.infinite.matrix <- function(x){
 }
 
 
-fpkm <- all_fpkm %>%
+fpkm_human <- all_fpkm %>%
   select(ends_with('_FPKM'),GeneSymbol) %>%
+  rowwise() %>%
+  mutate(s = sum(c_across(ends_with('FPKM')))) %>%
+  filter(s > 0) %>% dplyr::select(-s) %>%
   mutate(GeneSymbol = str_to_upper(GeneSymbol)) %>%
   filter(GeneSymbol %in% i_gene) %>%
   arrange(desc(`6_FPKM`))
-print(dim(fpkm))
+print(dim(fpkm_human))
 
+fpkm_mouse <- all_fpkm %>%
+  mutate(GeneSymbol = str_to_upper(GeneSymbol)) %>%
+  filter(GeneSymbol %in% i_gene) %>%
+  select(ends_with('_FPKM'),GeneSymbol) %>%
+  rowwise() %>%
+  mutate(s = sum(c_across(ends_with('FPKM')))) %>%
+  filter(s > 0) %>% dplyr::select(-s) %>%
+  distinct() %>%
+  arrange(desc(`1_FPKM`))
+print(dim(fpkm_mouse))
 
 tpms <- apply(all_fpkm %>%
                 select(ends_with('_FPKM'),gene_id) %>%
@@ -772,40 +801,60 @@ tpms <- apply(all_fpkm %>%
               2,fpkmToTpm)
 
 
-M <- fpkm %>%
+M <- fpkm_human %>%
   column_to_rownames('GeneSymbol')
 print(dim(M))
 
 M <- M[rowSums(M)>1,]
 
-m1 <- log2(M)
-is.na(m1) <- sapply(m1, is.infinite)
-m1[is.na(m1)]<-0
-
+m1 <- log2(M + 1)
 m2 <- t(scale(t(M)))
 
-# ha <- columnAnnotation(bar = anno_barplot(final_data$days))
+p_heat <- pheatmap::pheatmap(m1,
+                   cluster_rows = TRUE,
+                   show_rownames = TRUE,
+                   cluster_cols = FALSE,
+                   clustering_method = "average",
+                   scale = "row",
+                   cellwidth = 15,
+                   cellheight = 15,
+                   border = FALSE,
+                   # annotation_col = anno
+                   )
 
+outpath <- path
+cohortname <- 'human'
+save_pheatmap_pdf(p_heat,
+                  file.path(
+                    outpath,
+                    paste0("fpkm_", cohortname, ".pdf")
+                  ),
+                  width = 10, height = 10
+)
+
+
+# ha <- columnAnnotation(bar = anno_barplot(final_data$days))
 # pdf()
 Heatmap(m1,
-        name = 'log2(FPKM+1)',
+        name = 'log10(FPKM+1)',
         na_col = '#E6E6FA',
         border_gp = gpar(col = 'black'),
         show_row_dend = T,
         show_column_dend = F,
         cluster_columns = F,
-        cluster_rows = F,
+        cluster_rows = T,
         clustering_distance_columns = 'euclidean',
         clustering_distance_rows = 'euclidean',
         clustering_method_rows = 'complete',
         clustering_method_columns = 'complete',
-        # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
-        col = circlize::colorRamp2(c(0,16), c("white", "#C00000")),
+        col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
+        # col = circlize::colorRamp2(c(0,16), c("white", "#C00000")),
         width = ncol(M)*unit(8, "mm"),
         # height = nrow(M)*unit(6, "mm"),
         # top_annotation = ha,
         column_names_rot = 90,
         show_column_names = T,
+        show_row_names = FALSE,
         # column_names_gp = gpar(fontsize=1)
 )
 
@@ -814,6 +863,53 @@ dev.off()
 
 
 
+
+
+
+
+
+
+
+
+
+# plot kegg ---------------------------------------------------------------
+
+kegg_df <- read_delim(
+  '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R-2-VS-R-4_DE_significant_enrichment.xls'
+)
+
+
+kegg_df_f <- kegg_df %>% filter(Qvalue<=0.05) %>%
+  select(c(Pathway,Level1,`DEGs with pathway annotation (154)`),Qvalue) %>%
+  mutate(num = str_extract(`DEGs with pathway annotation (154)`,'[0-9]{1,2}')) %>%
+  mutate(num = as.integer(num)) %>%
+  arrange(Level1, num)
+kegg_df_f$Pathway <- factor(kegg_df_f$Pathway, levels = unique(kegg_df_f$Pathway))
+
+library(showtext)
+font_add_google()
+
+
+(ps <- kegg_df_f %>%
+  filter(Level1 %in% c(
+                       'Environmental Information Processing'
+                       )) %>%
+  ggplot(aes(x = Pathway, y = num, fill = Level1)) +
+  geom_col(fill = 'firebrick1') +
+  geom_text(aes(label=num, y = num+1.5)) +
+  # ggrepel::geom_text_repel(aes(label=num)) +
+  coord_flip() +
+  # ggsci::scale_fill_aaas() +
+  theme_bw() +
+  scale_x_discrete(labels = function(x) {str_wrap(x, width = 40)}) +
+  theme(text = element_text(size = 12),
+        legend.position = 'none'
+        ) + ggtitle('Environmental Information Processing') )
+
+ggsave(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/ei.pdf',
+       plot = ps,
+       width = 10, height = 10
+         )
 
 
 

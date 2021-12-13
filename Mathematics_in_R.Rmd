@@ -1,0 +1,37 @@
+---
+title: "求导"
+author: "liuc"
+date: "11/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+在R中进行数学计算，包括线性代数、概率、微积分等。
+https://en.wikibooks.org/wiki/R_Programming/Mathematics
+
+## 在R中对函数求导
+```{r}
+f <- expression(
+  y = x^3 + sin(x) + exp(x)
+)
+
+d <- deriv(f,"x",function.arg = TRUE)
+d(1)
+```
+
+## 在R中求积分
+```{r}
+f  <-  function(x) x^3 + sin(x) + exp(x)
+
+integrate(f, 1,2)
+```
+
+## 微积分包
+```{r}
+library(calculus)
+```
+
+

@@ -120,6 +120,7 @@ pwc2 <- long_data %>%
     ))
 
 # 单因素协方差, ANCOVA
+# 协方差分析总是需要一个协变量的，主变量一般是分类数据
 aov_xie <- aov(score ~ AGE + time, data = long_data) # 协变量写在因子前面
 summary(aov_xie)
 car::Anova(aov_xie, type = 'III')
@@ -410,7 +411,7 @@ get_minus <- function(i, sex){
     mutate(Day1 = `Day 1`-`Day 0`,
            Day7 = `Day 7`-`Day 0`
     ) %>%
-    rename('PatientID'='Patient ID') %>%
+    dplyr::rename('PatientID'='Patient ID') %>%
     pivot_longer(cols = -c(`PatientID`, AGE,`Day 0`, `Day 1`, `Day 7`, class),
                  names_to = 'time',
                  values_to = 'score'
@@ -498,7 +499,7 @@ get_minus <- function(i, sex){
     bind_rows(
       mn_ESR %>% mutate(class = 'Untreated')
     ) %>%
-    rename('PatientID'='Patient ID') %>%
+    dplyr::rename('PatientID'='Patient ID') %>%
     pivot_longer(cols = -c(`PatientID`, `Day 0`, class, AGE), names_to = 'time', values_to = 'score') %>%
     arrange(PatientID) %>%
     convert_as_factor(PatientID, time, class) %>%
@@ -568,6 +569,14 @@ geefit_main <- geeglm(
 )
 summary(geefit_main)
 anova(geefit_main)
+
+# Day0作为协变量的协方差分析,two.way
+aov_xie <- aov(score ~ AGE + time*class, data = df2)
+summary(aov_xie)
+car::Anova(aov_xie, type = 'III')
+postHocs <- multcomp::glht(aov_xie,
+                           linfct = multcomp::mcp(time = "Tukey"))
+summary(postHocs)
 
 
 # just for plot -----------------------------------------------------------
