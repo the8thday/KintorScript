@@ -1,0 +1,112 @@
+---
+title: "errorBar"
+author: "liuc"
+date: "12/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## plot beautiful mean+errorbar figure
+
+```{r}
+library(tidyverse)
+library(ggprism)
+library(ggsignif)
+```
+
+
+针对 sd se ci 皆绘制mean/median的带errorbar的图片
+
+```{r}
+error_plot <- function(data, x, y, fill, 
+                       plot = 'bar',
+                       v = 'se'
+                       ){
+  plot <- match.arg(plot, c('bar', 'line', 'errorbar', 'point'))
+  p <- ggplot2::ggplot(data = data, 
+                       aes_string(x = x, y = y, fill = fill)
+                       ) +
+    stat_summary(fun = 'mean',
+               geom = 'bar',
+               position = position_dodge(0.9)
+               ) +
+    stat_summary(geom = 'point',
+               fun = 'mean'
+               ) +
+    stat_summary(geom = 'errorbar',
+                 fun.min = function(x){mean(x)-sd(x)},
+                 fun.max = function(x){mean(x)+sd(x)},
+                 width = 0.2) +
+    theme_prism() +
+    scale_y_continuous(expand = expansion(mult = c(0,0)), 
+                     limits = c(0, NA)
+                     ) +
+    ggsci::scale_fill_aaas()
+                       }
+```
+
+a test
+
+```{r}
+data(gapminder, package = 'gapminder') # 长数据格式
+gapminder %>% filter(year %in% c(1997,2002, 2007)) %>% 
+  rstatix::convert_as_factor(year) -> df
+
+
+ggplot(df, mapping = aes(x = year, y = lifeExp, fill = year)) + 
+  stat_summary(fun = 'mean',
+               geom = 'bar',
+               position = position_dodge(0.9)
+               ) +
+  stat_summary(geom = 'point',
+               fun = 'mean'
+               ) +
+  stat_summary(geom = 'errorbar',
+               fun.min = function(x){mean(x)-sd(x)},
+               fun.max = function(x){mean(x)+sd(x)},
+               width = 0.2
+               ) +
+  theme_prism() +
+  scale_y_continuous(expand = expansion(mult = c(0,0)), 
+                     limits = c(0, NA)
+                     ) +
+  ggsci::scale_fill_aaas() +
+  ggsignif::geom_signif(
+    comparisons = list(c('1997','2002'), c('2002','2007')),
+    map_signif_level = TRUE
+  )
+```
+
+ci + line
+
+```{r}
+gapminder %>% filter(year %in% c(1997,2002, 2007)) -> df1
+
+ggplot(df1, mapping = aes(x = year, y = lifeExp, fill = year)) + 
+  stat_summary(geom = 'line',
+               fun = 'mean'
+               ) +
+  stat_summary(fun.data = 'mean_cl_boot')
+```
+
+```{r}
+ggplot(df, mapping = aes(x = year, y = lifeExp, fill = year, color = year, group=1)) + 
+  stat_summary(geom = 'line',
+               fun = 'mean'
+               ) +
+  stat_summary(geom = 'errorbar',
+               fun.min = function(x){mean(x)-sd(x)},
+               fun.max = function(x){mean(x)+sd(x)},
+               width = 0.2
+               ) +
+  scale_y_continuous(expand = expansion(mult = c(0,0)),
+                     limits = c(0, NA)
+                     ) +
+  theme_prism()
+```
+
+
+
