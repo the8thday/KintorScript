@@ -770,6 +770,7 @@ M <- foo %>% dplyr::select(-log2FoldChange) %>%
   column_to_rownames('SYMBOL')
 
 col <- colorRampPalette(brewer.pal(10, "RdYlBu"))(256)
+col <- colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100)
 
 png(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/AR/AR_FPKM_group13.png',
     width=10,height=8,units="in",res=1000

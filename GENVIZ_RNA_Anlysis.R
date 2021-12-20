@@ -1,3 +1,22 @@
+## ---------------------------
+##
+## Script name:
+##
+## Purpose of script:
+##
+## Author: LiuCong
+##
+## Date Created: 2021-11-17
+##
+## Copyright (c) cliu, 2021
+## Email: dibatian@live.com
+##
+## ---------------------------
+##
+## Notes: 金唯智RNA测序数据的再分析，为两细胞系U937/RAW，在lps刺激后加入普克鲁胺
+##
+##
+## ---------------------------
 library(tidyverse)
 library(ComplexHeatmap)
 library(VennDiagram)
@@ -14,6 +33,14 @@ save_pheatmap_pdf <- function(x, filename, width=10, height=10) {
   stopifnot(!missing(x))
   stopifnot(!missing(filename))
   pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+save_pheatmap_png <- function(x, filename, width=8,height=10,units="in",res=1000) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  png(filename, width=width, height=height,units = units, res = res)
   grid::grid.newpage()
   grid::grid.draw(x$gtable)
   dev.off()
@@ -48,12 +75,16 @@ R2R4_sig <- read_delim(file.path(path, 'Group_R-2-VS-R-4_DE_significant_anno.xls
 
 go_inter <- function(x){
   x %>%
-    dplyr::select(geneID, pval, FDR, logFC, Regulation, GeneSymbol)
+    dplyr::select(gene_id, PValue, FDR, logFC, GeneSymbol)
 }
 
 
 R1R2_R2R3 <- go_inter(R1R2_sig) %>%
   full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
+  select(sort(names(.)))
+
+R1R2_R2R3 <- go_inter(R1R2) %>%
+  full_join(go_inter(R2R3), by = 'gene_id', suffix = c('_R1R2', '_R2R3')) %>%
   select(sort(names(.)))
 
 # R1R2_R2R3 %>% write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R1R2_R2R3.txt',
@@ -71,12 +102,12 @@ R2R3_R2R4 <- go_inter(R2R3_sig) %>%
   # write_delim(file = '/Users/congliu/OneDrive/kintor/Daily_Work/genviz_1012/Mouse/R2R3_R2R4.txt', delim = '\t')
 
 # merge all three files
-foo <- go_inter(R2R4_sig) %>%
+foo <- go_inter(R2R4) %>%
   rename_with(.fn = ~paste0(.x, '_R2R4')) %>%
-  rename(geneID=geneID_R2R4)
-all_three <- go_inter(R1R2_sig) %>%
-  full_join(go_inter(R2R3_sig), by = 'geneID', suffix = c('_R1R2', '_R2R3')) %>%
-  full_join(foo, by = 'geneID') %>%
+  rename(gene_id=gene_id_R2R4)
+all_three <- go_inter(R1R2) %>%
+  full_join(go_inter(R2R3), by = 'gene_id', suffix = c('_R1R2', '_R2R3')) %>%
+  full_join(foo, by = 'gene_id') %>%
   select(sort(names(.)))
 
 
@@ -85,10 +116,10 @@ all_three <- go_inter(R1R2_sig) %>%
 M <- all_three %>%
   select(GeneSymbol_R1R2, GeneSymbol_R2R3, GeneSymbol_R2R4, logFC_R1R2, logFC_R2R3, logFC_R2R4) %>%
   filter(!is.na(GeneSymbol_R2R4)) %>%
-  # mutate(GeneSymbol_R2R4 = str_to_upper(GeneSymbol_R2R4)) %>%
-  # filter(GeneSymbol_R2R4 %in% i_gene) %>%
+  mutate(GeneSymbol_R2R4 = str_to_upper(GeneSymbol_R2R4)) %>%
+  filter(GeneSymbol_R2R4 %in% i_gene) %>%
   arrange(desc(logFC_R1R2), desc(logFC_R2R4), desc(logFC_R2R3)) %>%
-  filter(!is.na(GeneSymbol_R1R2)) %>%
+  # filter(!is.na(GeneSymbol_R1R2)) %>%
   select(-GeneSymbol_R1R2, -GeneSymbol_R2R3) %>%
   filter(!str_detect(GeneSymbol_R2R4, '^Gm')) %>%
   filter(!str_detect(GeneSymbol_R2R4, 'Rik$')) %>%
@@ -107,24 +138,33 @@ p_heat1 <- pheatmap::pheatmap(M,
                              # cellheight = 15,
                              fontsize_row = 8,
                              border = FALSE,
+                             legend = TRUE,
+                             legend_labels = 'logFC'
                              # na_col = 'grey'
                              # annotation_col = anno
 )
+save_pheatmap_png(p_heat1,
+                  file.path(
+                    outpath,
+                    paste0("heatmap_nodiff_", cohortname, ".png")
+                  )
+)
+
 save_pheatmap_pdf(p_heat1,
                   file.path(
                     outpath,
-                    paste0("heatmap_diff_", cohortname, ".pdf")
-                  ),
-                  width = 10, height = 10
-)
+                    paste0("heatmap_nodiff_", cohortname, ".pdf")
+                  )
+                  )
 
-pdf("/Users/congliu/OneDrive/kintor/Daily_Work/
-    all_three_2.pdf",
-    width=8,height=8)
+png(file.path(
+  outpath,
+  paste0("heatmap_nodiff_", cohortname, ".png")),
+    width=8,height=10,units="in",res=1000
+)
 Heatmap(M,
         name = 'logFC',
-        col = circlize::colorRamp2(c(-10, 0, 10), c("navy", "white", "firebrick3")),
-        # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
+        col = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
         border_gp = gpar(col = 'black'),
         show_row_dend = F,
         show_column_dend = F,
