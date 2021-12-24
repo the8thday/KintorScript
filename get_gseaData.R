@@ -116,7 +116,10 @@ pp <- ggplot(data = setGene,
                   max.overlaps = 10,
                   arrow = arrow(length = unit(0.02, "npc"),
                                 ends = "last", type = "open"),
-                  segment.color= 'black')
+                  segment.color= 'black') +
+  annotate('text', x = 10000, y = 0.75,
+           label = gsea@result[1, "ID"]
+           )
 pp
 
 
