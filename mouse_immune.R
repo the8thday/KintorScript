@@ -81,7 +81,6 @@ ggsave(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/CIB
 )
 
 
-
 colour <- c("#DC143C","#0000FF","#20B2AA","#FFA500","#9370DB","#98FB98",
             "#F08080","#1E90FF","#7CFC00","#FFFF00","#808000","#FF00FF",
             "#FA8072","#7B68EE","#9400D3","#800080","#A0522D","#D2B48C",
@@ -141,7 +140,7 @@ write.csv(counts.quatile,
           paste(result.path, "/ImmunCC.immuereceptor.quartileNorm.csv", sep=""),
           row.names=T, quote=F)
 
-# CIBERSORT
+# start CIBERSORT local analysis here
 mixture_file <- '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/ImmunCC.immuereceptor.quartileNorm.txt'
 sig_matrix <- '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/SignatureMatrix.rnaseq.txt'
 sampleGroup <- readxl::read_excel('/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/sampleInfor2.xlsx')
@@ -158,6 +157,43 @@ df_plot1 <- df_plot %>% pivot_longer(cols = 2:11,
                                      names_to = 'CellType', values_to = 'Composition'
 ) %>% arrange(class)
 df_plot1$rowname <- factor(df_plot1$rowname, levels = unique(df_plot1$rowname))
+df_plot2 <- df_plot1 %>% filter(!class %in% c('Normal'))
+
+p2 <- ggpubr::ggboxplot(
+  df_plot2,
+  x = "CellType",
+  y = "Composition",
+  fill = "class",
+  xlab = "",
+  ylab = "Cell composition",
+  main = "TME Cell composition"
+) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 1
+  ),
+  legend.position = 'none'
+  ) +
+  # stat_compare_means(method = "anova", label.y = 6) +
+  ggpubr::stat_compare_means(aes(group = class),
+                             label = "p.signif",
+                             comparisons =list(c("ployIC", "ployIC4")),
+                             method = 'wilcox.test',
+                             paired = FALSE
+  )
+
+p2
+
+
+res <- compare_means(data = df_plot2, formula = Composition ~ class,
+                     group.by = 'CellType'
+)
+
+ggsave(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/CIBERSORT_boxpot2.pdf',
+       plot = p2,
+       width = 10, height = 10
+)
 
 
 # mMCP-counter ------------------------------------------------------------
@@ -188,7 +224,41 @@ df_plot1 <- df_plot %>% pivot_longer(cols = 2:17,
 ) %>% arrange(class)
 df_plot1$rowname <- factor(df_plot1$rowname, levels = unique(df_plot1$rowname))
 
+df_plot2 <- df_plot1 %>% filter(!class %in% c('Normal'))
+
+p2 <- ggpubr::ggboxplot(
+  df_plot2,
+  x = "CellType",
+  y = "Composition",
+  fill = "class",
+  xlab = "",
+  ylab = "Cell composition",
+  main = "TME Cell composition"
+  ) +
+  theme(axis.text.x = element_text(
+    angle = 90,
+    hjust = 1,
+    vjust = 1
+  ),
+  legend.position = 'none'
+  ) +
+  # stat_compare_means(method = "anova", label.y = 6) +
+  ggpubr::stat_compare_means(aes(group = class),
+                             label = "p.signif",
+                             comparisons =list(c("ployIC", "ployIC4")),
+                             method = 'wilcox.test',
+                             paired = FALSE
+                             )
+
+p2
 
 
+res <- compare_means(data = df_plot2, formula = Composition ~ class,
+                     group.by = 'CellType'
+                     )
 
+ggsave(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/mMCP_boxpot.pdf',
+       plot = p2,
+       width = 10, height = 10
+)
 
