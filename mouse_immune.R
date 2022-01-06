@@ -226,11 +226,12 @@ df_plot1$rowname <- factor(df_plot1$rowname, levels = unique(df_plot1$rowname))
 
 df_plot2 <- df_plot1 %>% filter(!class %in% c('Normal'))
 
-p2 <- ggpubr::ggboxplot(
+p2 <- ggpubr::ggdotplot(
   df_plot2,
   x = "CellType",
   y = "Composition",
-  fill = "class",
+  fill = "class", dotsize = 0.5,
+  # add = 'point',add.params = list(color = 'class', size = 1, position = position_dodge(width = 0.9)),
   xlab = "",
   ylab = "Cell composition",
   main = "TME Cell composition"
@@ -262,3 +263,6 @@ ggsave(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/mMC
        width = 10, height = 10
 )
 
+write_delim(res, file = '/Users/congliu/OneDrive/kintor/Daily_Work/小鼠组织RNA/mMCP_compare.txt',
+            delim = '\t'
+            )

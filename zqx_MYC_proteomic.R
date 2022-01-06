@@ -26,10 +26,10 @@ df_profiling_3nM <- readxl::read_excel(
 df_profiling_1.5nM <- readxl::read_excel(
   '/Users/congliu/OneDrive/kintor/qianx/12-17/1.5nM_profiling_with significant.xlsx')
 
-# 参数
-df <- df_profiling_3nM
+# 参数, 3nm/1.nm时更改
+df <- df_profiling_1.5nM
 path = '/Users/congliu/OneDrive/kintor/qianx/12-17'
-cohert = '3nM'
+cohort = '1.5nM'
 
 df$fdr <- p.adjust(df$ttest, method = 'BH')
 
@@ -37,7 +37,7 @@ df_diff <- df %>% filter(signficant %in% c('up', 'down')) %>%
   arrange(fdr, desc(abs(log2ratio)))
 dim(df_diff)
 write_delim(df_diff,
-            file.path(path, glue::glue('{cohert}_volcano_genelist.txt')),
+            file.path(path, glue::glue('{cohort}_volcano_genelist.txt')),
             delim = '\t'
             )
 
@@ -67,7 +67,7 @@ p <- ggplot(df, aes(x = log2ratio, y = -log10pvalue, color = signficant)) +
                            size = 3,box.padding = unit(0.5, 'lines'), segment.color = 'black',
                            show.legend = FALSE)
 
-ggsave(plot = p, filename = file.path(path, glue::glue('{cohert}_volcano.pdf')),
+ggsave(plot = p, filename = file.path(path, glue::glue('{cohort}_volcano.pdf')),
        width = 10, height = 10)
 
 # MAplot
@@ -84,17 +84,181 @@ p2 <- ggplot(df_p, aes(x = baseMean, y = log2ratio, color = signficant)) +
                                                                        label = GeneSymbol),
                            size = 3,box.padding = unit(0.5, 'lines'), segment.color = 'black', show.legend = FALSE)
 
-ggsave(plot = p2, filename = file.path(path, glue::glue('{cohert}_MAplot.pdf')),
+ggsave(plot = p2, filename = file.path(path, glue::glue('{cohort}_MAplot.pdf')),
        width = 10, height = 10)
 
+
+# enrichment analysis
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(viridis)
+outpath <- path
+geneSymbol <- df_intersect$GeneSymbol
+gene_map <- clusterProfiler::bitr(geneSymbol,
+                                  fromType = "SYMBOL",
+                                  toType = "ENTREZID",
+                                  OrgDb = org.Hs.eg.db, drop = TRUE)
+
+enrich.go <- enrichGO(
+  gene = geneSymbol,
+  OrgDb = org.Hs.eg.db,
+  keyType = 'SYMBOL',
+  ont = 'BP',
+  pAdjustMethod = 'BH',
+  pvalueCutoff = 0.05,
+  qvalueCutoff  = 0.2,
+  # readable = TRUE
+)
+
+egosim <- simplify(enrich.go,
+                   cutoff = 0.7,
+                   by = 'p.adjust',
+                   select_fun = min,
+                   measure = 'Wang'
+)
+
+pp <- dotplot(enrich.go,
+              font.size = 12,
+              color = 'p.adjust',
+              showCategory=20,
+              title = 'GO(BP) Enrichment'
+) +
+  scale_color_viridis() +
+  scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
+
+pp2 <- barplot(egosim,
+               font.size = 12
+) +
+  scale_fill_viridis() +
+  scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
+
+(pp3 <- cnetplot(egosim,
+                 node_label = 'all'))
+
+ego2 <- enrichplot::pairwise_termsim(egosim)
+(pp4 <- enrichplot::treeplot(ego2,
+                             hclust_method = "ward.D"
+))
+
+write_delim(enrich.go@result,
+            file = file.path(outpath, paste0(cohort, '_goResult.txt')),
+            delim = '\t')
+write_delim(egosim@result,
+            file = file.path(outpath, paste0(cohort, '_goSim.txt')),
+            delim = '\t')
+ggsave(file = file.path(outpath, paste0(cohort, '_goResult.pdf')),
+       plot = pp, width = 10, height = 10)
+ggsave(file = file.path(outpath, paste0(cohort, '_goCnet.pdf')),
+       plot = pp3, width = 10, height = 10)
+ggsave(file = file.path(outpath, paste0(cohort, '_goTree.pdf')),
+       plot = pp4, width = 10, height = 10)
+
+# kegg
+de_l <- gene_map$ENTREZID
+
+kegg <- enrichKEGG(
+  gene = de_l,
+  keyType = 'ncbi-geneid',
+  organism = 'hsa',
+  pAdjustMethod = 'fdr',
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2,
+  use_internal_data = F
+)
+kegg@pvalueCutoff <- 1
+kegg@qvalueCutoff <- 1
+
+keggx <- setReadable(kegg, 'org.Hs.eg.db', 'ENTREZID')
+
+kegg_p <- barplot(kegg,
+                  font.size = 15,
+                  title = 'KEGG Enrichment',
+                  showCategory = 20
+) +
+  scale_fill_viridis()
+
+write_delim(keggx@result,
+            file = file.path(outpath, paste0(cohort, '_KEGGX.txt')), delim = '\t')
+ggsave(file.path(outpath, paste0(cohort, '_KEGG.pdf')),
+       plot = kegg_p, width = 10, height = 10)
+
+# browseKEGG(kegg, pathID = 'hsa04080')
+
+# WikiPathways, Reactome
+ewiki <- enrichWP(de_l,
+                  organism = "Homo sapiens",
+                  pAdjustMethod = "BH",
+                  pvalueCutoff = 0.05,
+                  qvalueCutoff = 0.2
+)
+ewiki_p <- dotplot(ewiki,
+                   font.size = 12,
+                   color = 'p.adjust',
+                   showCategory=20,
+                   title = 'WikiPathway ORA Enrichment'
+) +
+  scale_color_viridis() +
+  scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
+ggsave(file.path(outpath, paste0(cohort, '_WikiPathway.pdf')),
+       plot = ewiki_p, width = 10, height = 10)
+ewiki <- setReadable(ewiki, OrgDb = org.Hs.eg.db)
+write_delim(ewiki@result,
+            file = file.path(outpath, paste0(cohort, '_WikiPathway.txt')), delim = '\t')
+
+eReactome <- ReactomePA::enrichPathway(gene=de_l,
+                                       pvalueCutoff = 0.05,
+                                       readable=TRUE,
+                                       organism = "human",
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff = 0.2
+)
+react_p <- dotplot(eReactome,
+                   font.size = 12,
+                   color = 'p.adjust',
+                   showCategory=20,
+                   title = 'Reactome Analysis'
+) +
+  scale_color_viridis() +
+  scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
+
+# viewPathway("E2F mediated regulation of DNA replication",
+#             readable = TRUE,
+#             foldChange = geneList)
+ggsave(file.path(outpath, paste0(cohort, '_Reactome.pdf')),
+       plot = react_p, width = 10, height = 10)
+write_delim(eReactome@result,
+            file = file.path(outpath, paste0(cohort, '_Reactome.txt')), delim = '\t')
+
+# DOSE
+enrich.do <- DOSE::enrichDO(
+  gene = de_l,
+  ont = 'DO',
+  pvalueCutoff = 0.05,
+  qvalueCutoff = 0.2,
+  readable = TRUE
+)
+
+do_p <- dotplot(enrich.do,
+                font.size = 12,
+                color = 'p.adjust',
+                showCategory=20,
+                title = 'DO Analysis'
+) +
+  scale_color_viridis() +
+  scale_y_discrete(labels = function(x) {str_wrap(x, width = 40)})
+ggsave(file.path(outpath, paste0(cohort, '_DO.pdf')),
+       plot = do_p, width = 10, height = 10)
+write_delim(enrich.do@result,
+            file = file.path(outpath, paste0(cohort, '_DO.txt')), delim = '\t')
 
 
 # string
 library(STRINGdb)
 library(igraph)
+library(tidygraph)
 library(ggraph)
 
-gene.df <- df_diff %>% select(GeneSymbol) %>%
+gene.df <- df_diff %>% dplyr::select(GeneSymbol) %>%
   as.data.frame()
 
 string_db <- STRINGdb$new(species=9606,
@@ -113,10 +277,10 @@ data_links <- data_mapped$STRING_id %>% string_db$get_interactions()
 head(data_links)
 
 links <- data_links %>%
-  mutate(from = data_mapped[match(from, data_mapped$STRING_id), "SYMBOL"]) %>%
-  mutate(to = data_mapped[match(to, data_mapped$STRING_id), "SYMBOL"]) %>%
+  mutate(from = data_mapped[match(from, data_mapped$STRING_id), "GeneSymbol"]) %>%
+  mutate(to = data_mapped[match(to, data_mapped$STRING_id), "GeneSymbol"]) %>%
   dplyr::select(from, to , last_col()) %>%
-  dplyr::rename(weight = combined_score)
+  dplyr::rename(weight = combined_score) %>% distinct()
 
 nodes <- links %>% { data.frame(gene = c(.$from, .$to)) } %>%
   distinct()
@@ -129,7 +293,7 @@ igraph::V(net)$deg <- igraph::degree(net)
 igraph::V(net)$size <- igraph::degree(net)/5
 igraph::E(net)$width <- igraph::E(net)$weight/10
 # 使用ggraph绘图
-ggraph(net,layout = "stress")+
+ggraph(net_2,layout = "stress")+
   geom_edge_fan(aes(edge_width=width), color = "lightblue", show.legend = F)+
   geom_node_point(aes(size=size), color="orange", alpha=0.7)+
   geom_node_text(aes(filter=deg>5, label=name), size = 5, repel = T)+
@@ -153,7 +317,7 @@ igraph::V(net_2)$deg <- igraph::degree(net_2)
 igraph::V(net_2)$size <- igraph::degree(net_2)/5
 igraph::E(net_2)$width <- igraph::E(net_2)$weight/10
 
-ppi_p <- ggraph(net_2,layout = "centrality", cent = deg)+
+ppi_p <- ggraph(net_2, layout = "centrality", cent = deg)+
   geom_edge_fan(aes(edge_width=width), color = "lightblue", show.legend = F)+
   geom_node_point(aes(size=size), color="orange", alpha=0.7)+
   geom_node_text(aes(filter=deg>0, label=name), size = 5, repel = T)+
@@ -162,7 +326,7 @@ ppi_p <- ggraph(net_2,layout = "centrality", cent = deg)+
   guides(size=F)+
   theme_graph()
 
-ggsave(plot = p2, filename = file.path(path, glue::glue('{cohert}_PPI.pdf')),
+ggsave(plot = ppi_p, filename = file.path(path, glue::glue('{cohort}_PPI.pdf')),
        width = 10, height = 10)
 
 
@@ -187,6 +351,15 @@ ggvenn(
 )
 
 ggvenn(a, show_elements = TRUE, label_sep = "\n")
+
+
+df_intersect <- read_delim(
+  '/Users/congliu/OneDrive/kintor/qianx/12-17/intersect_genelist.txt',
+  delim = '\t'
+)
+cohort = 'intersect'
+
+
 
 
 
