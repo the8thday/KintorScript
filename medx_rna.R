@@ -473,17 +473,17 @@ AR_Gene1 <- read_delim('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/A
   dplyr::rename('TF'='# TF')
 AR_Gene2 <- read_delim('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/AR_regulators.human.tsv')
 names(AR_Gene2) <- names(AR_Gene1)
-AR_Gene <- AR_Gene1 %>% bind_rows(AR_Gene2)
+AR_Gene <- AR_Gene1 %>% bind_rows(AR_Gene2) # TF+Target 为全部的基因
 
-ar_go <- read.gmt(file.path(path1, 'GOBP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
-wp_go <- read.gmt(file.path(path1, 'WP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
-ar_reg <- read.gmt(file.path(path1, 'GOBP_REGULATION_OF_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+ar_go <- clusterProfiler::read.gmt(file.path(path1, 'GOBP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+wp_go <- clusterProfiler::read.gmt(file.path(path1, 'WP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+ar_reg <- clusterProfiler::read.gmt(file.path(path1, 'GOBP_REGULATION_OF_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
 ar_msigdb <- ar_go %>% bind_rows(wp_go) %>% bind_rows(ar_reg)
 # ar_id <- unique(ar_msigdb %>% pull(gene))
 
 ar_id <- unique(c(unique(AR_Gene %>% pull(TF)), unique(AR_Gene$Target)))
-ar_id <- unique(c(AR_Gene2$TF, 'AR'))
-ar_id <- unique(hair_one$gene)
+# ar_id <- unique(c(AR_Gene2$TF, 'AR'))
+# ar_id <- unique(hair_one$gene)
 print(length(ar_id))
 rm_normal <- sample_info %>% filter(class !='normal') %>%
   mutate(bianhao = str_c('FPKM.',bianhao)) %>%
@@ -524,11 +524,15 @@ ComplexHeatmap::Heatmap(log2(M+1),
 
 
 # GSEA aalysis ---
-cohort <- 'group12'
+cohort <- 'group13'
 path2 <- '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/'
 
 df_de <- read_delim(
-  file = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group_12_paired/DESeq2_DEG_lfcShrink_group12.txt',
+  file = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13_5v8/DESeq2_DEG_lfcShrink_group13.txt',
+  delim = '\t'
+)
+df_de2 <- read_delim(
+  file = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/DESeq2_DEG_filtered_group13.txt',
   delim = '\t'
 )
 
@@ -563,10 +567,10 @@ AnnotationDbi::select(x = org.Hs.eg.db, keys = 'GO:0051799',
 
 
 # AR geneset
-ar_go <- read.gmt(file.path(path1, 'GOBP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
-wp_go <- read.gmt(file.path(path1, 'WP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
-ar_reg <- read.gmt(file.path(path1, 'GOBP_REGULATION_OF_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
-ar_ttrust <- read.gmt(file.path(path1, 'AR_TTRUST_GENE.gmt'))
+ar_go <- clusterProfiler::read.gmt(file.path(path1, 'GOBP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+wp_go <- clusterProfiler::read.gmt(file.path(path1, 'WP_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+ar_reg <- clusterProfiler::read.gmt(file.path(path1, 'GOBP_REGULATION_OF_ANDROGEN_RECEPTOR_SIGNALING_PATHWAY.gmt'))
+ar_ttrust <- clusterProfiler::read.gmt(file.path(path1, 'AR_TTRUST_GENE.gmt'))
 ar_msigdb <- ar_go %>% bind_rows(wp_go) %>% bind_rows(ar_reg) %>% bind_rows(ar_ttrust)
 ar_one <- ar_msigdb %>%
   mutate(term = 'MSigDB_TRRUST_AR') %>% distinct()
@@ -619,7 +623,7 @@ gsea <- GSEA(gene_sort,
              pvalueCutoff = 0.05,
              pAdjustMethod = "BH",
              minGSSize = 3,
-             maxGSSize = 500,
+             maxGSSize = 1000,
              by = "fgsea"
 )
 em2 <- setReadable(gsea,
@@ -639,9 +643,9 @@ gsea_p1 <- enrichplot::gseaplot(em2, 1,
   annotate("text", 0.8, 0.85,
            label = lab, hjust=0, vjust=0)
 
-gsea_p <- enrichplot::gseaplot2(gsea, 1,
+gsea_p <- enrichplot::gseaplot2(gsea, 1:3,
                                 title = gsea$Description[1]
-) +
+)
   annotate("text", 0.8, 0.85,
            label = lab, hjust=0, vjust=0)
 
@@ -656,7 +660,7 @@ write_delim(x = em2@result,
             delim = '\t'
             )
 
-leading_gene <- (em2@result %>% pull(core_enrichment) %>%
+leading_gene <- (em2@result[1,] %>% pull(core_enrichment) %>%
   str_split(pattern = '/'))[[1]]
 gsea_de <- df_de %>% filter(SYMBOL %in% leading_gene)
   dplyr::select(SYMBOL,log2FoldChange, pvalue, padj, regulation, significant)
@@ -707,12 +711,18 @@ head(em)
 library(ComplexHeatmap)
 library("RColorBrewer")
 
-target_genes <- read_delim(
-  '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group_12_paired/AR/group12_AR.txt'
+target_genes2 <- read_delim(
+  '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/AR/group13_AR.txt'
 ) %>%
-  drop_na()
+  drop_na() %>% arrange(padj, abs(log2FoldChange))
+target_genes <- read_delim(
+  '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13_5v8/AR/group13_AR.txt'
+) %>%
+  dplyr::filter((padj <= 0.05) & (abs(log2FoldChange) >= 1)) %>%
+  drop_na() %>% arrange(padj, abs(log2FoldChange))
 # target_genes <- target_genes %>% filter(SYMBOL %in% c(unique(AR_Gene1$Target), 'AR'))
-target_genes <- target_genes %>% filter(SYMBOL %in% c(unique((target_genes %>% slice(1:33))$SYMBOL), 'AR'))
+target_genes <- target_genes %>%
+  dplyr::filter(SYMBOL %in% c(unique((target_genes %>% dplyr::slice(1:34))$SYMBOL), 'AR'))
 
 fpkm <- read_tsv('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/FPKM.txt')
 metafile <- "/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/sample25.xlsx"
@@ -736,8 +746,9 @@ sampleGroup <- readxl::read_excel(metafile) %>%
 
 # select id
 ids_remove <- sampleGroup %>% filter(class=='occ') %>% pull(bianhao)
-ids_remove <- c(ids_remove, '12506N0001'
-                # '12506I190015','12506N0002','12506I190014'
+ids_remove <- c(ids_remove, '12506N0001',
+                # '12506I190015','12506N0002',
+                '12506I190014'
 )
 
 fpkm <- fpkm %>%
@@ -747,11 +758,11 @@ fpkm <- fpkm %>%
 
 anno1 <- sampleGroup %>% dplyr::select(bianhao, class, sample) %>%
   filter(class!='occ') %>%
-  filter(!bianhao %in% c('12506N0001'))
+  filter(!bianhao %in% c('12506N0001','12506I190014'))
 
 foo <- fpkm %>% column_to_rownames('rowname') %>% t() %>% as.data.frame() %>%
   rownames_to_column() %>% left_join(anno1, by = c('rowname'='bianhao')) %>%
-  arrange(class) %>% dplyr::select(-class, -rowname) %>% rename('rowname'='sample') %>%
+  arrange(class) %>% dplyr::select(-class, -rowname) %>% dplyr::rename('rowname'='sample') %>%
   column_to_rownames('rowname') %>% t() %>% as.data.frame() %>%
   rownames_to_column() %>% left_join(target_genes,by = c('rowname'='ENSEMBL')) %>%
   arrange(desc(log2FoldChange)) %>%
@@ -772,7 +783,7 @@ M <- foo %>% dplyr::select(-log2FoldChange) %>%
 col <- colorRampPalette(brewer.pal(10, "RdYlBu"))(256)
 col <- colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100)
 
-png(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/AR/AR_FPKM_group13.png',
+png(filename = '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13_5v8/AR/AR_FPKM_group13.png',
     width=10,height=8,units="in",res=1000
 )
 ht <- Heatmap(t(scale(t(log2(M + 1)))),
@@ -798,20 +809,50 @@ ht <- Heatmap(t(scale(t(log2(M + 1)))),
         show_column_names = TRUE,
         row_names_gp = gpar(fontsize=8),
         )
-
+show(ht)
 dev.off()
 
 
 
+# goup12 intersect group13 ------------------------------------------------
+
+library(VennDiagram)
+
+g12_degs <- read_delim(
+  '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group_12_paired/DESeq2_DEG_filtered_group12.txt',
+  '\t'
+)
+
+g13_degs <- read_delim(
+  '/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group13/DESeq2_DEG_filtered_group13.txt',
+  '\t'
+)
+
+venn_list <- list(g12=g12$SYMBOL,g13=g13$SYMBOL)
+
+venn.plot <- venn.diagram(venn_list,
+                          filename = '/Users/congliu/OneDrive/kintor/Daily_Work/RAW_venn.png',
+                          fill = c('red', 'green'), alpha = 0.50,
+                          # cat.col = rep('black', 2),
+                          # col = 'black',
+                          col = "transparent",
+                          print.mode=c("raw","percent"),
+                          output=TRUE,
+                          # cex = 1, fontfamily = 'serif', cat.cex = 1, cat.fontfamily = 'serif', margin = 0.2,
+                          # imagetype="png",
+                          # height = 880,
+                          # width = 880,
+                          # resolution = 1000,
+                          # compression = "lzw"
+                          )
 
 
+group12_wnt <- c('NFATC1/LGR6/FRZB/WNT7B/FZD7/SERPINF1/RAC3/TCF7L1/PLCB1/TCF7L2/LGR4/FZD8/NFATC2/WNT4/ROR2/PRICKLE2/ROR1/PPP3CA/CTNND2/WIF1/CSNK2A3')
+aa <- str_split(group12_wnt, pattern = '/')[[1]]
 
-
-
-
-
-
-
-
+g12_degs %>% filter(SYMBOL %in% aa) %>%
+  write_delim('/Users/congliu/OneDrive/kintor/Daily_Work/follicle_RNA/re_analysis/group_12_paired/kegg_wnt.txt',
+              delim = '\t'
+              )
 
 
