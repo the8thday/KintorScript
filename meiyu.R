@@ -127,15 +127,15 @@ pivot_data2 <- function(datapath, outpath,
   }
   res1 %>%
     arrange(.data[[Day]]) %>%
-    write_delim(file = file.path(outpath, "res.txt"), delim = "\t")
+    write_delim(file = file.path(outpath, "res2.txt"), delim = "\t")
 }
 
 # 修改以下需要修改的地方
 datapath <- '/Users/congliu/OneDrive/kintor/Daily_Work/meiyu/GT20029-DATA-20211117-二次编码.xlsx'
-# pivot_data(datapath, '/Users/congliu/OneDrive/kintor/Daily_Work/meiyu/')
+pivot_data(datapath, '/Users/congliu/OneDrive/kintor/Daily_Work/meiyu/')
 pivot_data2(datapath,
             outpath = '/Users/congliu/OneDrive/kintor/Daily_Work/meiyu/',
-            Subject = 'subject',
+            Subject = 'Subject',
             Day = 'Day Nominal',
             Hour = 'Hour Nominal',
             con = 'Concentration (pg/mL)',
