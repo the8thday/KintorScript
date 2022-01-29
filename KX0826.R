@@ -27,7 +27,6 @@ library(ggeffects)
 
 # tidy data ---------------------------------------------------------------
 
-
 drug_his <- readxl::read_excel(
   '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/KX0826-CN-1002_Medical Review Listing.xlsx',
   sheet = '既往_合并用药'
@@ -116,6 +115,7 @@ bar <- patient_summary %>% select(`受试者号`, `年龄`, `性别`, `BMI`) %>%
 
 # write_excel_csv(bar, '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/meibo_PK.csv')
 
+
 # 以毛发检验为outcome的分析 --------------------------------------------------------
 
 # 针对foo的重复测量数据分别进行gee和lme, foo为具有结局指标的120例样本
@@ -125,56 +125,149 @@ foo2 <- foo %>% left_join((patient_summary %>% select(`受试者号`, `年龄`, 
   left_join(cls.dose2, by = c('受试者号'='受试者ID')) %>%
   left_join((clin_diag_study0 %>% select(`受试者号`, `雄激素性秃发严重程度检查结果`)),
             by = c('受试者号')) %>%
-  rename('dislevel'='雄激素性秃发严重程度检查结果')
+  rename('dislevel'='雄激素性秃发严重程度检查结果') %>%
+  mutate(feina = ifelse(`受试者号` %in% feina_id, 1, 0),
+         minuo = ifelse(`受试者号` %in% minuo_id, 2, 0),
+         drughis = feina + minuo
+         ) %>% select(-c(feina, minuo))
 
+# df <- foo2 %>% pivot_longer(
+#   cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, W1D1, dislevel, drughis),
+#   names_to = 'time',
+#   values_to = 'score'
+# ) %>%
+#   rename('PatientID'='受试者号',
+#          'age' = '年龄',
+#          'group' = '研究项目分组'
+#          ) %>%
+#   mutate(across(c(score, W1D1, BMI, age), as.numeric))
+# df$time <- factor(df$time, levels = c('W6D1','W12D1', 'W18D1', 'W24D1'))
 df <- foo2 %>% pivot_longer(
-  cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, W1D1, dislevel),
+  cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis),
   names_to = 'time',
   values_to = 'score'
 ) %>%
   rename('PatientID'='受试者号',
          'age' = '年龄',
          'group' = '研究项目分组'
-         ) %>%
-  mutate(across(c(score, W1D1, BMI, age), as.numeric))
-df$time <- factor(df$time, levels = c('W6D1','W12D1', 'W18D1', 'W24D1'))
+  ) %>%
+  mutate(across(c(score, BMI, age), as.numeric)) %>%
+  rstatix::convert_as_factor(drughis)
+df$time <- factor(df$time, levels = c('W1D1','W6D1','W12D1', 'W18D1', 'W24D1'))
+
 df$group <- factor(df$group, levels = c('安慰剂QD', '安慰剂BID','2.5mgBID','5mgQD','5mgBID'))
+# write_excel_csv(foo2, '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/aov.csv')
 
 
-# gee only 主效应
+# 针对df的数据探索 ---------------------------------------------------------------
+
+library(showtext)
+showtext_auto(enable = TRUE)
+# font_add_google('')
+
+ggplot(df, mapping = aes(x = time, y = score, color = group, group=group)) +
+  stat_summary(geom = 'line',
+               fun = 'mean'
+  ) +
+  stat_summary(geom = 'point',
+               fun = 'mean'
+  ) +
+  stat_summary(geom = 'errorbar',
+               fun.min = function(x){mean(x)-sd(x)},
+               fun.max = function(x){mean(x)+sd(x)},
+               width = 0.2
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0,0)),
+                     limits = c(0, NA)
+  ) + ggsci::scale_color_lancet() +
+  ggprism::theme_prism() +
+  theme(text = element_text(family='STHeiti'))
+
+
+set.seed(42)
+ss <- sample(unique(df$PatientID), 10)
+
+ggplot(df %>% filter(PatientID %in% ss),
+       aes(x = time, y = score, color = PatientID)) +
+  geom_point() +
+  geom_line(aes(group = PatientID)) +
+  # facet_grid(Subject ~ ., scales = 'free') +
+  scale_y_continuous(expand = expansion(mult = c(0,0)),
+                     limits = c(0, NA)
+  ) +
+  scale_color_manual(values = colorRampPalette(RColorBrewer::brewer.pal(9, "Set1"))(21)) +
+  ggprism::theme_prism() +
+  # theme_bw() +
+  theme(text = element_text(family='STHeiti'),
+        # axis.text.x = element_text(angle = 90, size = 6),
+        legend.position="bottom"
+        # axis.text.y = element_text(size = 4),
+        # strip.text.y = element_text(angle = 0, size = 6),
+        # legend.position = 'none'
+  )
+
+
+# df 数据的gee lme ----------------------------------------------------------
+
+
+# 重复测量方差分析
+df1 <- df %>% drop_na()
+two.way <- rstatix::anova_test(score ~ time * group +Error(`PatientID`/time),
+                      data = df1
+)
+rstatix::get_anova_table(two.way)
+
+# if you don't have a completely balanced User*A*B design, then aov() likely gets in trouble
+fit <- aov(score ~ time + group + Error(`PatientID`),
+           data = df1)
+# report::report(fit)
+summary(fit)
+anova_summary(fit)
+parameters::model_parameters(fit)
+effectsize::eta_squared(fit)
+
+
+# gee 考虑所有的协变量的主效应
 geefit_main <- geeglm(
-  score ~ time + group,
+  score ~ time + group + age + BMI + dislevel + drughis,
   id=PatientID,
-  corstr='exchangeable',
+  corstr='independence',
   family="gaussian",
   data=df,
   std.err = 'san.se'
 )
 summary(geefit_main)
 anova(geefit_main)
+QIC(geefit_main)
 broom::tidy(geefit_main)
 
-# gee 考虑所有的协变量
-geefit2 <- geeglm(score ~ time + group + age + BMI + W1D1 + dislevel,
+# gee 考虑 time score的交互效应
+geefit2 <- geeglm(score ~ time * group + age + BMI + dislevel + drughis,
                   id=PatientID,
-                  corstr='exchangeable',
+                  corstr='independence',
                   family="gaussian",
                   data=df,
                   std.err = 'san.se')
 summary(geefit2)
 QIC(geefit2)
+anova(geefit2)
 
-anova(geefit_main, geefit2)
+anova(geefit_main, geefit2) # 结果显示交互效应并没有实际的意义
 
-## 多水平模型/线性混合模型
+
+## 多水平模型/线性混合模型 ###
 lme_model <-
-  lmerTest::lmer(score ~ time + group + age + BMI + W1D1 + dislevel + (1|`PatientID`),
-             data = df
+  lmerTest::lmer(score ~ time + group + age + BMI + drughis + dislevel + (1|`PatientID`),
+             data = df,
+             REML = TRUE
   )
 
 summary(lme_model)
+performance(lme_model)
 lmerTest::ranova(lme_model)
 anova(lme_model, type = 'III', ddf="Satterthwaite")
+car::Anova(lme_model)
+# nlme::anova.lme(lme_model, type = "marginal", adjustSigma = F) # 不适用
 aa <- ggpredict(lme_model, 'time')
 
 plot(ggemmeans(lme_model, terms = c("time", "group"),
@@ -184,8 +277,21 @@ plot(ggemmeans(lme_model, terms = c("time", "group"),
   ggplot2::ggtitle("GLMER Effect plot")
 
 ##### plot model by estimate
-# sjPlot::plot_model(lme_model)
+sjPlot::plot_model(lme_model)
 plot(parameters(lme_model))
+
+
+lme_model2 <-
+  lmerTest::lmer(score ~ time * group + age + BMI + drughis + dislevel + (1|`PatientID`),
+                 data = df
+  )
+
+summary(lme_model2)
+performance(lme_model2)
+lmerTest::ranova(lme_model2)
+anova(lme_model2, type = 'III', ddf="Satterthwaite")
+
+anova(lme_model, lme_model2)
 
 
 # 不同的分组对比 -----------------------------------------------------------------
@@ -196,7 +302,7 @@ df2$group <-  factor(df2$group, levels = c('安慰剂BID','2.5mgBID','5mgBID'))
 
 # only 主效应
 geefit_main2 <- geeglm(
-  score ~ time + group,
+  score ~ time + group + age + BMI + W1D1 + dislevel,
   id=PatientID,
   corstr='exchangeable',
   family="gaussian",
@@ -205,9 +311,10 @@ geefit_main2 <- geeglm(
 )
 summary(geefit_main2)
 anova(geefit_main2)
+gtsummary::tbl_regression(geefit_main2)
 
 # 考虑所有的协变量
-geefit3 <- geeglm(score ~ time + group + age + BMI + W1D1 + dislevel,
+geefit3 <- geeglm(score ~ time * group + age + BMI + W1D1 + dislevel,
                   id=PatientID,
                   corstr='exchangeable',
                   family="gaussian",
@@ -236,7 +343,53 @@ plot(ggemmeans(lme_model2, terms = c("time", "group"),
 
 # normal statistic for group BID ------------------------------------------
 
+library(rstatix)
+# 以6W和24W作为主要研究终点，进行基础统计推断
+foo3 <- foo2 %>% fill(starts_with('W'), .direction = 'up') %>%
+  mutate(
+    across(starts_with('W'), as.numeric),
+    diffW6 = W6D1 - W1D1,
+    diffW24 = W24D1 - W1D1
+  )
+foo3 <- foo3 %>% filter(`研究项目分组` %in% c('安慰剂BID','2.5mgBID','5mgBID'))
+
+# 检验
+foo3 %>% group_by(`研究项目分组`) %>% identify_outliers(diffW24)
+foo3 %>% group_by(`研究项目分组`) %>% shapiro_test(diffW24)
+foo3 %>% levene_test(diffW24 ~ `研究项目分组`)
+
+anova_test(data = foo3,
+       formula = diffW24 ~ `研究项目分组`
+       )
+
+aov.res <- aov(diffW24 ~ `研究项目分组`,
+               data = foo3)
+report::report(aov.res)
+summary(aov.res)
+aggregate(foo3$diffW24, by = list(foo3$研究项目分组), FUN = mean)
+tuk <- TukeyHSD(aov.res, conf.level = 0.95)
+plot(tuk)
+
+(pwc <- foo3 %>%
+  pairwise_t_test(
+    diffW24 ~ `研究项目分组`,
+    paired = FALSE,
+    p.adjust.method = "bonferroni"
+  ))
+
+(pwc2 <- foo3 %>%
+    wilcox_test(
+      diffW24 ~ `研究项目分组`,
+      paired = FALSE,
+      p.adjust.method = "bonferroni"
+    ))
 
 
 
+# 只考虑两组
+foo4 <- foo3 %>% filter(`研究项目分组` %in% c('安慰剂BID','5mgBID'))
+
+t_test(data = foo4,
+       formula = diffW24 ~ `研究项目分组`
+       )
 
