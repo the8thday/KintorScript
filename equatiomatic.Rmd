@@ -1,0 +1,31 @@
+---
+title: "equatiomatic"
+author: "liuc"
+date: "2/8/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 画出模型的数学公式
+本R包可以通过Rmarkdown的形式展示线性方程的公式，绘制。
+
+```{r}
+library(equatiomatic)
+```
+
+```{r}
+geefit_main <- geeglm(
+  score ~ time + group + W1D1 + age + BMI + dislevel + drughis,
+  id=PatientID,
+  corstr='independence',
+  family="gaussian",
+  data=df,
+  std.err = 'san.se'
+)
+
+extract_eq(geefit_main)
+```
+
