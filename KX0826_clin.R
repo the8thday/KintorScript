@@ -13,7 +13,7 @@
 ##
 ## ---------------------------
 ##
-## Notes: 此为KX0826-CN-1002 的患者入组数据。
+## Notes: 此为KX0826-CN-1002 的患者入组数据。主要采用的分析方法为重复测量资料的数据分析
 ##
 ##
 ## ---------------------------
@@ -22,8 +22,12 @@ library(tidyverse)
 library(easystats)
 library(geepack)
 library(lme4)
+# library(brms)
 library(lmerTest)
+# library(merTools)
+# library(mixedup) # 一个提取mixed model的小工具
 library(ggeffects)
+library(emmeans)
 
 # tidy data ---------------------------------------------------------------
 
@@ -80,9 +84,10 @@ cls.dose <- readxl::read_excel(
 print(length(unique(drug_his$受试者号))) # 共166例患者
 glue::glue('total drugs {length(table(drug_his$药物名称))}') # 竟然204种药
 
-idrugs <- c('米诺地尔酊', '非那雄胺片', '启悦','蓝乐非那雄胺片', '仙琚非那雄胺片')
-feina_id <- drug_his %>% filter(`药物名称` %in% c('非那雄胺片', '非那雄胺')) %>% pull(`受试者号`)
-minuo_id <- drug_his %>% filter(`药物名称` %in% c('米诺地尔酊', '米诺地尔')) %>% pull(`受试者号`)
+idrugs <- c('米诺地尔酊', '非那雄胺片', '启悦','蓝乐', '仙琚')
+feina_id <- drug_his %>% filter(str_detect(`药物名称`, '非那雄胺')) %>%
+  pull(`受试者号`)
+minuo_id <- drug_his %>% filter(str_detect(`药物名称`, '米诺地尔')) %>% pull(`受试者号`)
 intersect(minuo_id, feina_id)
 
 
@@ -149,6 +154,7 @@ df_p <- foo2 %>% pivot_longer(
          ) %>%
   mutate(across(c(score, BMI, age), as.numeric))
 df_p$time <- factor(df_p$time, levels = c('W1D1','W6D1','W12D1', 'W18D1', 'W24D1'))
+df_p$group <- factor(df_p$group, levels = c('安慰剂QD', '安慰剂BID','2.5mgBID','5mgQD','5mgBID'))
 
 df <- foo2 %>%
   pivot_longer(
@@ -165,7 +171,7 @@ df <- foo2 %>%
 df$time <- factor(df$time, levels = c('diffW6','diffW12','diffW18', 'diffW24'))
 
 df$group <- factor(df$group, levels = c('安慰剂QD', '安慰剂BID','2.5mgBID','5mgQD','5mgBID'))
-# write_excel_csv(df, '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/gee.csv')
+# write_excel_csv(df2, '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/gee_lme_BID.csv')
 
 
 # 针对df的数据探索 ---------------------------------------------------------------
@@ -174,7 +180,22 @@ library(showtext)
 showtext_auto(enable = TRUE)
 # font_add_google('')
 
-ggplot(df, mapping = aes(x = time, y = score, color = group, group=group)) +
+df_pp <- foo2 %>% mutate(diffW1=W1D1-W1D1) %>%
+  pivot_longer(
+    cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
+    names_to = 'time',
+    values_to = 'score'
+  ) %>%
+  rename('PatientID'='受试者号',
+         'age' = '年龄',
+         'group' = '研究项目分组'
+  ) %>%
+  mutate(across(c(score, BMI, age), as.numeric)) %>%
+  rstatix::convert_as_factor(drughis)
+df_pp$time <- factor(df_pp$time, levels = c('diffW1','diffW6','diffW12','diffW18', 'diffW24'))
+df_pp$group <- factor(df_pp$group, levels = c('安慰剂QD', '安慰剂BID','2.5mgBID','5mgQD','5mgBID'))
+
+ggplot(df_pp, mapping = aes(x = time, y = score, color = group, group=group)) +
   stat_summary(geom = 'line',
                fun = 'mean'
   ) +
@@ -197,7 +218,7 @@ ggplot(df, mapping = aes(x = time, y = score, color = group, group=group)) +
 set.seed(42)
 ss <- sample(unique(df$PatientID), 10)
 
-ggplot(df %>% filter(PatientID %in% ss),
+ggplot(df_pp %>% filter(PatientID %in% ss),
        aes(x = time, y = score, color = PatientID)) +
   geom_point() +
   geom_line(aes(group = PatientID)) +
@@ -216,13 +237,31 @@ ggplot(df %>% filter(PatientID %in% ss),
         # legend.position = 'none'
   )
 
+ggplot(df_p,
+       aes(x = time, y = score, color = PatientID)) +
+  geom_point() +
+  geom_line(aes(group = PatientID)) +
+  facet_grid(group ~ ., scales = 'free') +
+  scale_y_continuous(expand = expansion(mult = c(0,0)),
+                     limits = c(0, NA)
+  ) +
+  scale_color_manual(values = colorRampPalette(RColorBrewer::brewer.pal(9, "Set1"))(120)) +
+  # ggprism::theme_prism() +
+  theme_bw() +
+  theme(text = element_text(family='STHeiti'),
+        # axis.text.x = element_text(angle = 90, size = 6),
+        # legend.position="bottom"
+        # axis.text.y = element_text(size = 4),
+        # strip.text.y = element_text(angle = 0, size = 6),
+        legend.position = 'none'
+  )
 
 # df 数据的gee lme ----------------------------------------------------------
 
 
 # 重复测量方差分析
 df1 <- df %>% drop_na()
-two.way <- rstatix::anova_test(score ~ time * group +Error(`PatientID`/time),
+two.way <- rstatix::anova_test(score ~ time * group + Error(`PatientID`/time),
                       data = df1
 )
 rstatix::get_anova_table(two.way)
@@ -256,7 +295,6 @@ geefit_main <- geeglm(
 )
 summary(geefit_main)
 anova(geefit_main)
-QIC(geefit_main)
 broom::tidy(geefit_main)
 # Estimated marginal means
 plot(ggemmeans(geefit_main, terms = c("time", "group"),
@@ -273,11 +311,14 @@ geefit2 <- geeglm(score ~ time * group + W1D1 + age + BMI + dislevel + drughis,
                   data=df,
                   std.err = 'san.se')
 summary(geefit2)
-QIC(geefit2)
-anova(geefit2)
+anova(geefit2) %>% as.data.frame() %>% rownames_to_column() %>%
+  write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/gee_main.csv')
 
 anova(geefit_main, geefit2) # 结果显示交互效应并没有实际的意义
+sjPlot::plot_model(geefit_main)
+gtsummary::tbl_regression(geefit_main)
 
+# final gee model
 gee_final <- geeglm(score ~ time + group + W1D1 + drughis,
                     id=PatientID,
                     corstr='independence',
@@ -286,27 +327,34 @@ gee_final <- geeglm(score ~ time + group + W1D1 + drughis,
                     std.err = 'san.se')
 summary(gee_final)
 QIC(gee_final)
+QIC(geefit2)
+QIC(geefit_main)
 anova(gee_final)
+anova(gee_final, geefit_main)
 plot(ggemmeans(gee_final, terms = c("time", "group"),
                condition = c(diagnose = "severe")),
      # facets = T
 ) +
   ggplot2::ggtitle("GEE Effect plot")
+gtsummary::tbl_regression(gee_final)
 
 
 ## 多水平模型/线性混合模型 ###
 lme_model <-
-  lmerTest::lmer(score ~ time + group + W1D1 + drughis + (1|`PatientID`),
+  lmerTest::lmer(score ~ time + group + W1D1 + drughis +(1|`PatientID`),
              data = df,
              REML = TRUE
   )
 
 summary(lme_model)
+confint(lme_model)
+head(coef(lme_model)$PatientID)
+ranef(coef(lme_model)$PatientID)
 performance(lme_model)
 lmerTest::ranova(lme_model)
-anova(lme_model, type = 'III', ddf="Satterthwaite")
+anova(lme_model, type = 'III', ddf="Satterthwaite") # typeIII 模型效应是矫正了其他因素后的各因素主效应结果
 car::Anova(lme_model)
-# nlme::anova.lme(lme_model, type = "marginal", adjustSigma = F) # 不适用
+# nlme::anova.lme(lme_model, type = "marginal", adjustSigma = F) # 不适用于此函数
 aa <- ggpredict(lme_model, 'time')
 
 plot(ggemmeans(lme_model, terms = c("time", "group"),
@@ -318,17 +366,20 @@ plot(ggemmeans(lme_model, terms = c("time", "group"),
 ##### plot model by estimate
 sjPlot::plot_model(lme_model)
 plot(parameters(lme_model))
+gtsummary::tbl_regression(lme_model, intercept=TRUE)
 
-
+# 纳入所有变量
 lme_model2 <-
-  lmerTest::lmer(score ~ time + group + W1D1 + drughis + (1|`PatientID`),
+  lmerTest::lmer(score ~ time + group + W1D1 + age + BMI + dislevel + drughis + (1|`PatientID`),
                  data = df
   )
 
 summary(lme_model2)
 performance(lme_model2)
 lmerTest::ranova(lme_model2)
-anova(lme_model2, type = 'III', ddf="Satterthwaite")
+anova(lme_model2, type = 'III', ddf="Satterthwaite") %>% as.data.frame() %>% rownames_to_column() %>%
+  write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/lme_main.csv')
+gtsummary::tbl_regression(lme_model2, intercept=TRUE)
 
 
 # 不同的分组对比 -----------------------------------------------------------------
@@ -349,6 +400,12 @@ geefit_main2 <- geeglm(
 summary(geefit_main2)
 anova(geefit_main2)
 gtsummary::tbl_regression(geefit_main2)
+anova(geefit_main2, type = 'III', ddf="Satterthwaite") # typeIII 模型效应是矫正了其他因素后的各因素主效应结果
+plot(ggemmeans(geefit_main2, terms = c("time", "group"),
+               condition = c(diagnose = "severe")),
+     # facets = T
+) +
+  ggplot2::ggtitle("GEE Effect plot")
 
 
 # lme model
@@ -359,11 +416,29 @@ lme_model3 <-
 
 summary(lme_model3)
 anova(lme_model3)
+anova(lme_model3, type = 'III', ddf="Satterthwaite")
+car::Anova(lme_model3)
 
 plot(ggemmeans(lme_model3, terms = c("time", "group"),
                condition = c(diagnose = "severe"))) +
   ggplot2::ggtitle("GLMER Effect plot")
+gtsummary::tbl_regression(lme_model3)
 
+# lme model, 不包含其他变量
+lme_model4 <-
+  lmerTest::lmer(score ~ time + group + W1D1 + (1|`PatientID`),
+                 data = df2
+  )
+
+summary(lme_model4)
+anova(lme_model4)
+anova(lme_model4, type = 'III', ddf="Satterthwaite")
+car::Anova(lme_model4)
+
+plot(ggemmeans(lme_model4, terms = c("time", "group"),
+               condition = c(diagnose = "severe"))) +
+  ggplot2::ggtitle("GLMER Effect plot")
+gtsummary::tbl_regression(lme_model4)
 
 # normal statistic for group BID ------------------------------------------
 
@@ -424,28 +499,59 @@ plot(tuk)
     ))
 
 # 协方差分析 ANCOVA
+ggpubr::ggscatter(
+  foo3, x = "W1D1", y = "W24D1",
+  color = "研究项目分组", add = "reg.line"
+)+
+  ggpubr::stat_regline_equation(
+    aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"), color = `研究项目分组`)
+  ) # 并不是很满足线性要求
 aov.xie <- aov(diffW24 ~ W1D1 + `研究项目分组`,
                data = foo3)
+aov.xie2 <- aov(W24D1 ~ W1D1 + `研究项目分组`,
+               data = foo3)
+res.aov <- foo3 %>% anova_test(W24D1 ~ W1D1 + `研究项目分组`)
+get_anova_table(res.aov) %>%
+  write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/anova.csv')
 myfit1 <- lm(diffW24 ~ W1D1 + `研究项目分组`,
              data = foo3)
-car::Anova(aov.xie, type = "III")
+broom::augment(myfit1)
+
+car::Anova(aov.xie2, type = "III")
 car::Anova(myfit1, type = "III")
 check_model(aov.xie)
 summary(aov.xie)
-plot(ggemmeans(aov.xie, terms = c("研究项目分组"),
+summary(aov.xie2)
+plot(ggemmeans(aov.xie2, terms = c("研究项目分组"),
                condition = c(diagnose = "severe")),
      # facets = T
 ) +
   ggplot2::ggtitle("ANCOVA Effect plot")
 # 两两比较
 pwc3 <- emmeans_test(
-  diffW24 ~ `研究项目分组`, covariate = W1D1,
+  W24D1 ~ `研究项目分组`,
+  covariate = W1D1,
   p.adjust.method = "fdr",
   data = foo3
 )
 (pwc3 %>% write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_test.csv'))
 get_emmeans(pwc3) %>%
   write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_W24.csv')
+# 针对W6周的数据
+aov.xie3 <- aov(W24D1 ~ W1D1 + `研究项目分组`,
+                data = foo3)
+summary(aov.xie3)
+broom::tidy(aov.xie3) %>%
+  write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/aov_bar.csv')
+pwc4 <- emmeans_test(
+  W24D1 ~ `研究项目分组`,
+  covariate = W1D1,
+  p.adjust.method = "fdr",
+  data = foo3
+)
+pwc4 %>% write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_bar.csv')
+get_emmeans(pwc4) %>%
+  write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_foo.csv')
 
 
 # 只考虑两组
