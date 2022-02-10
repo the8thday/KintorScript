@@ -91,7 +91,7 @@ minuo_id <- drug_his %>% filter(str_detect(`药物名称`, '米诺地尔')) %>% 
 intersect(minuo_id, feina_id)
 
 
-foo <- clin_diag_studys %>% select(`受试者号`, `访视名称`, `目标区域内非毳毛数（TAHC）`) %>%
+foo <- clin_diag_studys %>% select(`受试者号`, `访视名称`, `中心号`, `目标区域内非毳毛数（TAHC）`) %>%
   pivot_wider(names_from = `访视名称`, values_from = `目标区域内非毳毛数（TAHC）`)
 
 
@@ -158,13 +158,14 @@ df_p$group <- factor(df_p$group, levels = c('安慰剂QD', '安慰剂BID','2.5mg
 
 df <- foo2 %>%
   pivot_longer(
-  cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
+  cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
   names_to = 'time',
   values_to = 'score'
 ) %>%
   rename('PatientID'='受试者号',
          'age' = '年龄',
-         'group' = '研究项目分组'
+         'group' = '研究项目分组',
+         'center' = '中心号'
   ) %>%
   mutate(across(c(score, BMI, age), as.numeric)) %>%
   rstatix::convert_as_factor(drughis)
@@ -367,6 +368,13 @@ plot(ggemmeans(lme_model, terms = c("time", "group"),
 sjPlot::plot_model(lme_model)
 plot(parameters(lme_model))
 gtsummary::tbl_regression(lme_model, intercept=TRUE)
+## Pairwise comparisons, 对于lme模型中emmeans值进行两两比较，自然是针对分类变量
+(emm_res <- emmeans(lme_model, specs = 'time'))
+pairs(emm_res)
+contrast(emm_res)
+plot(emm_res, comparisons = TRUE) + theme_bw() +
+  labs(y = "", x = "Estimated marginal mean")
+
 
 # 纳入所有变量
 lme_model2 <-
@@ -449,7 +457,7 @@ foo3 <- foo2 %>%
   filter(`研究项目分组` %in% c('安慰剂BID','2.5mgBID','5mgBID')) %>%
   dplyr::select(!starts_with('diff')) %>%
   pivot_longer(
-    cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis),
+    cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis),
     names_to = 'time',
     values_to = 'score'
   ) %>%
@@ -567,29 +575,55 @@ t_test(data = foo4,
 
 # 数据填充后的lme分析
 df4 <- foo3 %>%
+  mutate(previsit = W1D1) %>%
   pivot_longer(
-    cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
+    cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('diff'), previsit),
     names_to = 'time',
     values_to = 'score'
   ) %>%
   rename('PatientID'='受试者号',
          'age' = '年龄',
-         'group' = '研究项目分组'
+         'group' = '研究项目分组',
+         'center' = '中心号'
   ) %>%
   mutate(across(c(score, BMI, age), as.numeric)) %>%
   rstatix::convert_as_factor(drughis)
-df4$time <- factor(df4$time, levels = c('diffW6','diffW12','diffW18', 'diffW24'))
+# df4$time <- factor(df4$time, levels = c('diffW6','diffW12','diffW18', 'diffW24'))
+df4$time <- factor(df4$time, levels = c('W1D1','W6D1','W12D1', 'W18D1', 'W24D1'))
 df4$group <- factor(df4$group, levels = c('安慰剂BID','2.5mgBID','5mgBID'))
 
 lme_model4 <-
-  lmerTest::lmer(score ~ time + group + W1D1 + drughis + (1|`PatientID`),
+  lmerTest::lmer(score ~ time + group + previsit + (1 |`PatientID`),
+                 data = df4
+  )
+lme_model5 <-
+  lmerTest::lmer(score ~ time + group + previsit + (1 |`PatientID`) + (1 | `center`),
                  data = df4
   )
 
 summary(lme_model4)
 anova(lme_model4)
+(emm_res <- emmeans(lme_model4, specs = 'group'))
+pairs(emm_res)
+contrast(emm_res)
+plot(emm_res, comparisons = TRUE) + theme_bw() +
+  labs(y = "", x = "Estimated Marginal Mean")
 
 plot(ggemmeans(lme_model4, terms = c("time", "group"),
                condition = c(diagnose = "severe"))) +
-  ggplot2::ggtitle("GLMER Effect plot")
+  ggplot2::ggtitle("GLMER Effect Plot")
+
+emmeans::emmip(lme_model4, formula = group ~ time, type = 'response') +
+  theme_bw() +
+  # geom_jitter(aes(x = time, y = score, colour = group),
+  #             data = df4, pch = 4, width = 0.1)
+  labs(y = "Estimated marginal mean",
+       x = "visit time",
+       colour = "")
+
+# see what the model’s predictions were, for each participant
+df4$prediction <- predict(lme_model4, df4)
+
+ggplot(df4, aes(x=time, y=prediction, color=PatientID)) +
+  stat_summary(fun.y='mean', geom='point', position=position_jitter(.3))
 
