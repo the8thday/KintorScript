@@ -24,22 +24,24 @@ library(ComplexHeatmap)
 library(RColorBrewer)
 
 
-ddPCR <- read_csv('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_ddpcr/ddPCR Viral load report_Feb 11.csv')
+ddPCR <- read_csv('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_ddpcr/ddPCR Viral load report_Feb 11.csv') %>%
+  janitor::clean_names()
 
 # 共745例样本； TestName 共有9种，不过排除Repeat ID的共有6种检测；Visit Name为SCREEN/D3/D7/D14/D28排除EW/UNSCHED
-table(ddPCR$`Test Name`)
+table(ddPCR$test_name)
 
-test_name <- 'COVID ddPCR NP final result'
-test_res <- ddPCR %>% filter(`Test Name` == test_name) %>%
-  filter(!`Visit Name` %in% c('EW', 'UNSCHED')) %>%
-  select(`Patient ID`, `Visit Name`, `Test Name`, `Test Result`) %>%
-  pivot_wider(names_from = `Visit Name`, values_from = `Test Result`)
+test_name2 <- 'COVID ddPCR NP final result'
+test_res <- ddPCR %>% filter(test_name == test_name2) %>%
+  filter(!visit_name %in% c('EW', 'UNSCHED')) %>%
+  # filter(!`Test Result` == 'Detected but below assay LoQ') %>%
+  select(`patient_id`, visit_name, `test_name`, test_result) %>%
+  pivot_wider(names_from = visit_name, values_from = `test_result`)
 
 test_res
 
 # 以热图的形式展示不同TestName的不同TestResult
-M <- test_res %>% select(-`Test Name`) %>%
-  column_to_rownames('Patient ID')
+M <- test_res %>% select(-test_name) %>%
+  column_to_rownames('patient_id')
 
 colors <- structure(c("red", "blue",'green', 'black'),
                     names = c('Positive', 'Negative', 'Detected but below assay LoQ','NOT REPORTED'))
@@ -59,29 +61,60 @@ Heatmap(M,
         col = colors,
         column_names_rot = 90,
         show_column_names = TRUE,
-        show_row_names = FALSE,
-        width = unit(2.5, 'cm')
-        # column_names_gp = gpar(fontsize=1)
+        show_row_names = TRUE,
+        width = unit(2.5, 'cm'),
+        row_names_gp = gpar(fontsize=8)
         )
+# 挑选异常样本
+abnormal <- test_res %>% filter((SCREEN == 'Negative' & (D3 != 'Negative' | D7 != 'Negative' | D14 != 'Negative' | D28 != 'Negative')) |
+                      (D3 == 'Negative' & (D7 != 'Negative' | D14 != 'Negative' | D28 != 'Negative')) |
+                      (D7 == 'Negative' & (D14 != 'Negative' | D28 != 'Negative')) |
+                      (D14 == 'Negative' & D28 != 'Negative')
+                    ) %>% distinct() %>%
+  relocate(D7, .before = D14)
+M <- abnormal %>% select(-`test_name`) %>%
+  column_to_rownames('patient_id')
 
-test_name <- 'N1 copies/mL (Np)'
-test_res2 <- ddPCR %>% filter(`Test Name` == test_name) %>%
-  filter(!`Visit Name` %in% c('EW', 'UNSCHED')) %>%
-  select(`Patient ID`, `Visit Name`, `Test Name`, `Test Result`) %>%
-  pivot_wider(names_from = `Visit Name`, values_from = `Test Result`) %>%
+
+## 针对连续变量的探索
+test_name1 <- 'N2 copies/mL (Np)'
+test_res2 <- ddPCR %>% filter(test_name == test_name1) %>%
+  filter(!visit_name %in% c('EW', 'UNSCHED')) %>%
+  select(patient_id, visit_name, patient_id, test_result) %>%
+  pivot_wider(names_from = visit_name, values_from = test_result) %>%
   mutate(across(starts_with('D'), as.numeric)) %>%
   mutate(SCREEN = as.numeric(SCREEN),
-         `Patient ID` = as.character(`Patient ID`)
+         patient_id = as.character(patient_id)
          )
 
 test_res2
-
-gtsummary::tbl_summary(test_res2 %>% select(-`Patient ID`),
+visdat::vis_miss(test_res2)
+gtsummary::tbl_summary(test_res2 %>% select(-patient_id),
                        type = all_continuous() ~ "continuous2",
                        statistic = all_continuous() ~ c("{N_nonmiss}",
                                                         "{median} ({p25}, {p75})",
                                                         "{min}, {max}")
                        )
+
+
+scale_this <- function(x){
+  (x - mean(x, na.rm=TRUE)) / sd(x, na.rm=TRUE)
+}
+
+test_res3 <- ddPCR %>% filter(test_name == test_name1) %>%
+  filter(!visit_name %in% c('EW', 'UNSCHED')) %>%
+  select(patient_id, visit_name, test_name, test_result, `investigator_name`) %>%
+  mutate(test_result = as.numeric(test_result),
+         patient_id = as.character(patient_id)
+  ) %>%
+  mutate(test_result  = scale_this(test_result))
+test_res3$visit_name <- factor(test_res3$visit_name, levels = c('SCREEN', 'D3', 'D7', 'D14', 'D28'))
+
+ggplot(data = test_res3, aes(x = `investigator_name`, y = `test_result`, color = visit_name)) +
+  geom_boxplot(outlier.size = 1) +
+  ggsci::scale_color_aaas() +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90))
 
 
 
