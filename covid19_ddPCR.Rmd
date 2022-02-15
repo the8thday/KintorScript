@@ -1,0 +1,40 @@
+---
+title: "covid19 ddPCR"
+author: "liuc"
+date: "2/14/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## covid-19 ddPCR
+
+covid-19患者的ddPCR数据
+
+```{r}
+library(tidyverse)
+
+```
+
+#### clean data
+
+```{r}
+ddPCR <- read_csv('/Users/congliu/OneDrive/kintor/Daily_Work/covid19_ddpcr/ddPCR Viral load report_Feb 11.csv')
+
+# 共745例样本； TestName 共有9种，不过排除Repeat ID的共有6种检测；Visit Name为SCREEN/D3/D7/D14/D28排除EW/UNSCHED
+table(ddPCR$`Test Name`)
+
+test_res <- ddPCR %>% filter(`Test Name` == 'COVID ddPCR NP final result') %>% 
+  filter(!`Visit Name` %in% c('EW', 'UNSCHED')) %>% 
+  select(`Patient ID`, `Visit Name`, `Test Name`, `Test Result`) %>% 
+  pivot_wider(names_from = `Visit Name`, values_from = `Test Result`)
+
+test_res
+```
+
+```{r}
+
+```
+
