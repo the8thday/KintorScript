@@ -181,22 +181,32 @@ library(showtext)
 showtext_auto(enable = TRUE)
 # font_add_google('')
 
+with(df_p, table(time, group)) # 可以看到数据在各个分组是unbalanced
+cell.means <- matrix(with(df_p,
+                          tapply(score, interaction(time, group), function(x){mean(x, na.rm = T)})),
+                     nrow = 5)
+cell.means
+apply(cell.means, 1, mean)
+with(df_p, aggregate(score,  by = list(time), FUN = function(x){mean(x, na.rm = T)})) #二者均值不同
+
 df_pp <- foo2 %>% mutate(diffW1=W1D1-W1D1) %>%
   pivot_longer(
-    cols = -c(`受试者号`, `年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
+    cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W')),
     names_to = 'time',
     values_to = 'score'
   ) %>%
   rename('PatientID'='受试者号',
          'age' = '年龄',
-         'group' = '研究项目分组'
+         'group' = '研究项目分组',
+         'center' = '中心号'
   ) %>%
   mutate(across(c(score, BMI, age), as.numeric)) %>%
   rstatix::convert_as_factor(drughis)
 df_pp$time <- factor(df_pp$time, levels = c('diffW1','diffW6','diffW12','diffW18', 'diffW24'))
 df_pp$group <- factor(df_pp$group, levels = c('安慰剂QD', '安慰剂BID','2.5mgBID','5mgQD','5mgBID'))
 
-ggplot(df_pp, mapping = aes(x = time, y = score, color = group, group=group)) +
+## plot
+ggplot(df_p, mapping = aes(x = time, y = score, color = group, group=group)) +
   stat_summary(geom = 'line',
                fun = 'mean'
   ) +
@@ -219,7 +229,7 @@ ggplot(df_pp, mapping = aes(x = time, y = score, color = group, group=group)) +
 set.seed(42)
 ss <- sample(unique(df$PatientID), 10)
 
-ggplot(df_pp %>% filter(PatientID %in% ss),
+ggplot(df_p %>% filter(PatientID %in% ss),
        aes(x = time, y = score, color = PatientID)) +
   geom_point() +
   geom_line(aes(group = PatientID)) +
@@ -604,10 +614,11 @@ lme_model5 <-
 summary(lme_model4)
 anova(lme_model4)
 (emm_res <- emmeans(lme_model4, specs = 'group'))
-pairs(emm_res)
+pairs(emm_res, adjust = 'tukey', infer = c(TRUE, TRUE))
+# pwpm(emm_res) # same as pairs
 contrast(emm_res)
 plot(emm_res, comparisons = TRUE) + theme_bw() +
-  labs(y = "", x = "Estimated Marginal Mean")
+  labs(x = "Estimated Marginal Mean")
 
 plot(ggemmeans(lme_model4, terms = c("time", "group"),
                condition = c(diagnose = "severe"))) +
