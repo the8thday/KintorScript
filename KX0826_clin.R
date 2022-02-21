@@ -479,7 +479,8 @@ foo3 <- foo2 %>%
     diffW12 = W12D1 - W1D1,
     diffW18 = W18D1 - W1D1,
     diffW24 = W24D1 - W1D1
-  )
+  ) %>%
+  rstatix::convert_as_factor(drughis)
 foo3$研究项目分组 <- factor(foo3$研究项目分组, levels = c('安慰剂BID', '2.5mgBID', '5mgBID'))
 
 
@@ -518,7 +519,7 @@ plot(tuk)
 
 # 协方差分析 ANCOVA
 ggpubr::ggscatter(
-  foo3, x = "W1D1", y = "W24D1",
+  foo3, x = "diffW24", y = "W24D1",
   color = "研究项目分组", add = "reg.line"
 )+
   ggpubr::stat_regline_equation(
@@ -526,28 +527,51 @@ ggpubr::ggscatter(
   ) # 并不是很满足线性要求
 aov.xie <- aov(diffW24 ~ W1D1 + `研究项目分组`,
                data = foo3)
-aov.xie2 <- aov(W24D1 ~ W1D1 + `研究项目分组`,
+aov.xie2 <- aov(diffW24 ~ W1D1 + `研究项目分组` * dislevel,
                data = foo3)
-res.aov <- foo3 %>% anova_test(W24D1 ~ W1D1 + `研究项目分组`)
+foo3 %>% # 在交互效应有统计学意义的时候采用此分析
+  group_by(dislevel) %>%
+  anova_test(diffW24 ~ W1D1 + `研究项目分组`)
+
+res.aov <- foo3 %>% anova_test(W24D1 ~ W1D1 + `研究项目分组` * dislevel)
 get_anova_table(res.aov) %>%
   write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/anova.csv')
 myfit1 <- lm(diffW24 ~ W1D1 + `研究项目分组`,
              data = foo3)
 broom::augment(myfit1)
 
-car::Anova(aov.xie2, type = "III")
+car::Anova(aov.xie2, type = "II")
 car::Anova(myfit1, type = "III")
 check_model(aov.xie)
 summary(aov.xie)
 summary(aov.xie2)
-plot(ggemmeans(aov.xie2, terms = c("研究项目分组"),
+plot(ggemmeans(aov.xie2, terms = c("研究项目分组", 'dislevel'),
                condition = c(diagnose = "severe")),
      # facets = T
 ) +
   ggplot2::ggtitle("ANCOVA Effect plot")
+
+# 针对aov.xie2交互效应是否有 统计学意义，采用不同的post hoc分析方法
+(emm_res <- emmeans(aov.xie2, specs = c("研究项目分组", 'dislevel')))
+pairs(emm_res, adjust = 'tukey', infer = c(TRUE, TRUE))
+grafify::posthoc_Levelwise(aov.xie2,
+                           c("研究项目分组", 'dislevel')
+                           )
+grafify::posthoc_vsRef(Model = aov.xie2,
+                       Fixed_Factor = c("研究项目分组", 'dislevel'),
+                       Ref_Level = 1, P_Adj = "fdr"
+)
+# same results by diff emmeans methods
+pc <- emmeans::emmeans(aov.xie2,
+                       specs = trt.vs.ctrl ~ `研究项目分组`|dislevel,
+                       type = "response",
+                       ref = 1,
+                       adjust = 'fdr')
+contrast(emm_res, method = 'trt.vs.ctrl',
+         type = 'response', adjust = 'fdr',by = 'dislevel', infer = c(TRUE, TRUE))
 # 两两比较
 pwc3 <- emmeans_test(
-  W24D1 ~ `研究项目分组`,
+  diffW24 ~ `研究项目分组`,
   covariate = W1D1,
   p.adjust.method = "fdr",
   data = foo3
@@ -555,6 +579,16 @@ pwc3 <- emmeans_test(
 (pwc3 %>% write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_test.csv'))
 get_emmeans(pwc3) %>%
   write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_W24.csv')
+
+pwc4 <- foo3 %>%
+  group_by(dislevel) %>%
+  emmeans_test(
+  diffW24 ~ `研究项目分组`,
+  covariate = W1D1,
+  p.adjust.method = "fdr"
+)
+pwc4
+
 # 针对W6周的数据
 aov.xie3 <- aov(W24D1 ~ W1D1 + `研究项目分组`,
                 data = foo3)
@@ -587,7 +621,7 @@ t_test(data = foo4,
 df4 <- foo3 %>%
   mutate(previsit = W1D1) %>%
   pivot_longer(
-    cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('diff'), previsit),
+    cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis, starts_with('W'), previsit),
     names_to = 'time',
     values_to = 'score'
   ) %>%
@@ -598,12 +632,12 @@ df4 <- foo3 %>%
   ) %>%
   mutate(across(c(score, BMI, age), as.numeric)) %>%
   rstatix::convert_as_factor(drughis)
-# df4$time <- factor(df4$time, levels = c('diffW6','diffW12','diffW18', 'diffW24'))
-df4$time <- factor(df4$time, levels = c('W1D1','W6D1','W12D1', 'W18D1', 'W24D1'))
+df4$time <- factor(df4$time, levels = c('diffW6','diffW12','diffW18', 'diffW24'))
+# df4$time <- factor(df4$time, levels = c('W1D1','W6D1','W12D1', 'W18D1', 'W24D1'))
 df4$group <- factor(df4$group, levels = c('安慰剂BID','2.5mgBID','5mgBID'))
 
 lme_model4 <-
-  lmerTest::lmer(score ~ time + group + previsit + (1 |`PatientID`),
+  lmerTest::lmer(score ~ time + group + previsit + dislevel + (1 |`PatientID`),
                  data = df4
   )
 lme_model5 <-
@@ -613,13 +647,14 @@ lme_model5 <-
 
 summary(lme_model4)
 anova(lme_model4)
-(emm_res <- emmeans(lme_model4, specs = 'group'))
+(emm_res <- emmeans(lme_model4, specs = c('group', 'dislevel')))
 pairs(emm_res, adjust = 'tukey', infer = c(TRUE, TRUE))
 # pwpm(emm_res) # same as pairs
 contrast(emm_res)
 plot(emm_res, comparisons = TRUE) + theme_bw() +
   labs(x = "Estimated Marginal Mean")
 
+ggemmeans(lme_model4, terms = c("group", "dislevel"))
 plot(ggemmeans(lme_model4, terms = c("time", "group"),
                condition = c(diagnose = "severe"))) +
   ggplot2::ggtitle("GLMER Effect Plot")
