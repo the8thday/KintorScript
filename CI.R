@@ -206,7 +206,7 @@ library(PropCIs)
 library(DescTools)
 
 # binomial proportion
-# 21 is total num
+# 31 is total num
 stats::binom.test(9, 31,
            0.5,
            alternative="two.sided",

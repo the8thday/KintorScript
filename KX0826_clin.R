@@ -464,7 +464,8 @@ library(rstatix)
 # 以6W和24W作为主要研究终点，进行基础统计推断
 foo3 <- foo2 %>%
   filter(!`受试者号` %in% c('01004', '03032', '03034', '06007')) %>%
-  filter(`研究项目分组` %in% c('安慰剂BID','2.5mgBID','5mgBID')) %>%
+  mutate(`研究项目分组` = ifelse(`研究项目分组`=='安慰剂QD', '安慰剂BID', `研究项目分组`)) %>%
+  filter(`研究项目分组` %in% c('安慰剂BID','2.5mgBID','5mgQD','5mgBID')) %>%
   dplyr::select(!starts_with('diff')) %>%
   pivot_longer(
     cols = -c(`受试者号`, `中心号`,`年龄`, BMI, `研究项目分组`, dislevel, drughis),
@@ -481,13 +482,18 @@ foo3 <- foo2 %>%
     diffW24 = W24D1 - W1D1
   ) %>%
   rstatix::convert_as_factor(drughis)
-foo3$研究项目分组 <- factor(foo3$研究项目分组, levels = c('安慰剂BID', '2.5mgBID', '5mgBID'))
+foo3$研究项目分组 <- factor(foo3$研究项目分组, levels = c('安慰剂BID', '2.5mgBID', '5mgQD','5mgBID'))
 
 
 # 检验正态性以及方差齐性
 foo3 %>% group_by(`研究项目分组`) %>% identify_outliers(diffW24)
 foo3 %>% group_by(`研究项目分组`) %>% shapiro_test(diffW24)
 foo3 %>% levene_test(diffW24 ~ `研究项目分组`)
+
+# boxplot
+foo3 %>%
+  ggplot()
+
 
 # 基础的方差分析
 anova_test(data = foo3,
@@ -519,7 +525,7 @@ plot(tuk)
 
 # 协方差分析 ANCOVA
 ggpubr::ggscatter(
-  foo3, x = "diffW24", y = "W24D1",
+  foo3, x = "W1D1", y = "diffW24",
   color = "研究项目分组", add = "reg.line"
 )+
   ggpubr::stat_regline_equation(
@@ -540,11 +546,13 @@ myfit1 <- lm(diffW24 ~ W1D1 + `研究项目分组`,
              data = foo3)
 broom::augment(myfit1)
 
-car::Anova(aov.xie2, type = "II")
+car::Anova(aov.xie2, type = "III")
 car::Anova(myfit1, type = "III")
 check_model(aov.xie)
 summary(aov.xie)
 summary(aov.xie2)
+postHocs <- multcomp::glht(aov.xie2, linfct = multcomp::mcp(`研究项目分组` = "Tukey"))
+
 plot(ggemmeans(aov.xie2, terms = c("研究项目分组", 'dislevel'),
                condition = c(diagnose = "severe")),
      # facets = T
@@ -559,14 +567,15 @@ grafify::posthoc_Levelwise(aov.xie2,
                            )
 grafify::posthoc_vsRef(Model = aov.xie2,
                        Fixed_Factor = c("研究项目分组", 'dislevel'),
-                       Ref_Level = 1, P_Adj = "fdr"
+                       Ref_Level = 1, P_Adj = "fdr", infer = c(TRUE, TRUE)
 )
 # same results by diff emmeans methods
 pc <- emmeans::emmeans(aov.xie2,
                        specs = trt.vs.ctrl ~ `研究项目分组`|dislevel,
                        type = "response",
                        ref = 1,
-                       adjust = 'fdr')
+                       adjust = 'fdr', infer = c(TRUE, TRUE))
+pc
 contrast(emm_res, method = 'trt.vs.ctrl',
          type = 'response', adjust = 'fdr',by = 'dislevel', infer = c(TRUE, TRUE))
 # 两两比较
@@ -579,7 +588,7 @@ pwc3 <- emmeans_test(
 (pwc3 %>% write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_test.csv'))
 get_emmeans(pwc3) %>%
   write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_W24.csv')
-
+# 对于two-way
 pwc4 <- foo3 %>%
   group_by(dislevel) %>%
   emmeans_test(
@@ -606,13 +615,14 @@ get_emmeans(pwc4) %>%
   write_excel_csv(file = '/Users/congliu/OneDrive/kintor/Daily_Work/KX826/emmeans_foo.csv')
 
 
-# 只考虑两组
+# 只考虑两组, 呈现的内容包括效应值、P值、CI
 foo4 <- foo3 %>%
   mutate(`研究项目分组` = as.character(`研究项目分组`)) %>%
   filter(`研究项目分组` %in% c('安慰剂BID','5mgBID'))
 
-t_test(data = foo4,
+aa <- t.test(
        formula = diffW24 ~ `研究项目分组`,
+       data = foo4,
        paired = F
        )
 
@@ -672,4 +682,6 @@ df4$prediction <- predict(lme_model4, df4)
 
 ggplot(df4, aes(x=time, y=prediction, color=PatientID)) +
   stat_summary(fun.y='mean', geom='point', position=position_jitter(.3))
+
+
 

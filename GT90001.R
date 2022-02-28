@@ -1,3 +1,23 @@
+## ---------------------------
+##
+## Script name:
+##
+## Purpose of script:
+##
+## Author: LiuCong
+##
+## Date Created: 2022-02-22
+##
+## Copyright (c) cliu, 2022
+## Email: dibatian@live.com
+##
+## ---------------------------
+##
+## Notes: GT90001 ALK 基因表达的血液样本检测指标
+##
+##
+## ---------------------------
+
 
 library(tidyverse)
 

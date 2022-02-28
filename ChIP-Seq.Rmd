@@ -1,0 +1,14 @@
+---
+title: "ChIP-Seq"
+author: "liuc"
+date: "1/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## some knowlege about ChIP-Seq
+
+

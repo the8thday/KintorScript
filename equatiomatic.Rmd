@@ -17,15 +17,13 @@ library(equatiomatic)
 ```
 
 ```{r}
-geefit_main <- geeglm(
-  score ~ time + group + W1D1 + age + BMI + dislevel + drughis,
-  id=PatientID,
-  corstr='independence',
-  family="gaussian",
-  data=df,
-  std.err = 'san.se'
-)
+df4 <- readr::read_rds('./dataset/df4.rds')
 
-extract_eq(geefit_main)
+lme_model4 <-
+  lmerTest::lmer(score ~ time + group + W1D1 + drughis + (1|`PatientID`),
+                 data = df4
+  )
+
+extract_eq(lme_model4)
 ```
 
