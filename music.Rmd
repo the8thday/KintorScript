@@ -1,0 +1,20 @@
+---
+title: "music"
+author: "liuc"
+date: "12/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## use R to make music
+
+Cool! You can make music by coding!
+
+```{r}
+library(music) # music theory
+library(gm) # generate music
+```
+
