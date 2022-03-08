@@ -567,8 +567,7 @@ grafify::posthoc_Levelwise(aov.xie2,
                            )
 grafify::posthoc_vsRef(Model = aov.xie2,
                        Fixed_Factor = c("研究项目分组", 'dislevel'),
-                       Ref_Level = 1, P_Adj = "fdr", infer = c(TRUE, TRUE)
-)
+                       Ref_Level = 1, P_Adj = "fdr", infer = c(TRUE, TRUE))
 # same results by diff emmeans methods
 pc <- emmeans::emmeans(aov.xie2,
                        specs = trt.vs.ctrl ~ `研究项目分组`|dislevel,
