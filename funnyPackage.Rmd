@@ -1,0 +1,78 @@
+---
+title: "funnyPackage"
+author: "liuc"
+date: '2022-03-01'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## funnyPackage
+
+此处记录碰到的一些有意思、有用的各种R package。
+
+
+### DataEditR
+
+https://dillonhammill.github.io/DataEditR/
+一个可以交互修改整理数据的R包。
+```{r}
+data_edit(mtcars,
+          viewer = "browser")
+```
+
+
+
+### ProjectTemplate
+
+ProjectTemplate is a system for automating the thoughtless parts of a data analysis project。
+不过感觉很多时候选择RStudio自带的用起来就很舒服。
+
+
+### compareGroups
+
+一个用于对比因变量和自变量关系的包.
+
+
+### datapasta
+
+将复制的数据变成dataframe等格式。
+
+
+### ggThemeAssist
+
+免代码调节ggplot的细节参数，比如字体，背景颜色
+
+
+### livecode
+局域网网页直播写代码
+
+
+
+### 2022-03-4
+
+```{r}
+# simpr
+# simpr provides a general, simple, and tidyverse-friendly framework for generating simulated data, fitting models on simulations, and tidying model results.
+
+
+# biodosetools
+# 剂量依赖的计算方法，不是很搞得清它是做什么的
+
+
+# interpretCI
+# 计算并展示CI的包，不过desctools已经挺好用的了吧
+
+
+# https://github.com/adayim/forestploter
+# 这个绘制森林图的包似乎和用过的一个很类似
+
+
+```
+
+
+
+
+
