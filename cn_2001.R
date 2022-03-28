@@ -44,7 +44,7 @@ cfdna_snv <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cumul
                                 sheet = 'DNA_SNV')
 cfdna_cnv <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cumulative_data_20210609.xlsx',
                                 sheet = 'DNA_CNV')
-cfdna_qc <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cumulative_data_20210609.xlsx',
+cfdna_qc <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cumulative_data_20210609-MLP.xlsx',
                                 sheet = 'DNA_QC_Summary')
 cfrna_splicing <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cumulative_data_20210609.xlsx',
                                 sheet = 'RNA_Splicing')
@@ -52,8 +52,22 @@ cfrna_expre <- readxl::read_excel('D:/2001/Kintor-GT0918-CN-2001_cfDNA_cfRNA_cum
                                 sheet = 'RNA_Expression')
 
 
-metadata <- readxl::read_excel('D:/2001/cn2001_metadata.xlsx',
+# metadata <- readxl::read_excel('D:/2001/cn2001_meta_infor.xlsx',
+#                                sheet = 'Sheet1') %>% 
+#   select(-c(days, subtype, status)) %>% 
+#   rename('days'='days_2',
+#          'subtype' = 'subtype2',
+#          'status' = 'status2'
+#          ) %>% 
+#   arrange(days)
+metadata <- readxl::read_excel('D:/2001/cn2001_meta_infor_yz.xlsx',
                                sheet = 'Sheet1') %>% 
+  select(c(SubjectID, dose, dosing, subtype2, days_2, status2, `time(months)`, CNSR)) %>% 
+  mutate(days =  round(`time(months)`*(365.25/12)),
+         status = if_else(CNSR==0,2,1)
+         ) %>% 
+  rename('subtype' = 'subtype2'
+  ) %>% 
   arrange(days)
 
 df1 <- cfdna_snv %>% left_join(metadata, by = c('SubjectID'='SubjectID'))
@@ -80,7 +94,7 @@ cfdna_qc %>% filter(NGSQC %in% c('FAIL','AT RISK'))
 cfdna_qc %>% filter(LibraryQC %in% c('FAIL','AT RISK'))
 
 # 用药时长统计
-metadata %<>% filter(days>100)
+# metadata %<>% filter(days>100)
 Hmisc::describe(metadata$days)
 describer::describe(metadata$days)
 ggplot(metadata, aes(y=days)) + geom_boxplot() + theme_bw()
@@ -124,7 +138,15 @@ write_delim(a1, 'D:/2001/foo.txt', delim = '\t')
 
 # survival analysis -------------------------------------------------------
 
-fit <- survfit(Surv(days, status) ~ dosing, data = metadata)
+new_meta <- readxl::read_excel('D:/2001/cn2001_meta_infor.xlsx',
+                               sheet = 'Sheet1'
+                               )
+three_one <- metadata %>% filter(days==1) %>% 
+  pull(SubjectID)
+
+fit <- survfit(Surv(days, status) ~ dosing,
+               data = metadata
+               )
 summary(fit)
 surv_summary(fit)
 ggsurvplot(fit, pval = T)
@@ -133,8 +155,97 @@ survdiff1 <- survdiff(Surv(days, status) ~ dosing, data = metadata)
 plot1 <- ggsurvplot(fit, pval = T)
 plot1$plot
 
-fit2 <- survfit(Surv(days, status) ~ subtype, data = metadata)
+
+# subtype survival analysis
+metadata_f <- metadata %>% 
+  filter(SubjectID %in% f_24)
+
+fit2 <- surv_fit(Surv(days, status) ~ subtype, data = metadata_f)
 ggsurvplot(fit2, pval = T)
+summary(fit2)
+surv_summary(fit2)
+surv_median(fit)
+new_meta_3 <- new_meta %>% 
+  filter(subtype2 == 'TNBC')
+rcompanion::groupwiseMedian(days ~ 1,
+                            data       = new_meta_3,
+                            conf       = 0.95,
+                            R          = 5000,
+                            percentile = TRUE,
+                            bca        = FALSE,
+                            basic      = FALSE,
+                            normal     = F,
+                            wilcox     = F,
+                            digits     = 3)
+
+DemoBio::SurvTimeReport(time = dat$time, status = dat$Status,
+                        tau = 8, quant = c(0.25,0.75),
+                        plot = TRUE)
+
+pp <- ggsurvplot(fit, 
+                 data = mm,
+                 surv.median.line = "hv",
+                 legend.title = "Subtype",
+                 legend.labs = c("AR+", "AR2+", "AR3+", "AR4+"),
+                 # legend.labs = c('HER+++','HR+','TNBC'),
+                 # legend.labs = c("200mg", "300mg"),
+                 legend = c(0.9,0.9),
+                 censor.shape="|", censor.size = 4,
+                 pval = TRUE,
+                 pval.method = TRUE,
+                 pval.size = 4,
+                 # pval.coord = c(0, 0.03),
+                 conf.int = FALSE,
+                 conf.int.style = "step",
+                 add.all = FALSE,
+                 risk.table = 'abs_pct',
+                 tables.height = 0.2,
+                 tables.theme = theme_cleantable(),
+                 risk.table.fontsize = 5,
+                 risk.table.y.text = TRUE,
+                 fontsize = 8,
+                 font.x = c(15),
+                 font.y = c(15),
+                 # font.family = 'Book Antiqua',
+                 # font.tickslab = c(20, "plain"),
+                 ncensor.plot = FALSE,
+                 ncensor.plot.height = 0.25,
+                 # cumevents.y.text = 8,
+                 # ylab="Cumulative survival (percentage)",
+                 xlab = " Time(Days)",
+                 break.time.by = 50,
+                 palette = 'aaas',
+                 ggtheme = cowplot::theme_cowplot(font_size = 15) +
+                   theme(axis.text.x = element_text(face = 'bold'),
+                         axis.text.y = element_text(face = 'bold'),
+                         axis.line = element_line(linetype = 'solid',
+                                                  size = 1),
+                         axis.ticks = element_line(size = 1),
+                         axis.title = element_text(face = 'bold')
+                   )
+                 # ggtheme = theme_survminer() +
+                 #   theme(legend.text = element_text(size = 20),
+                 #         legend.title = element_text(size = 20),
+                 #         axis.text.x = element_text(size = 20),
+                 #         text = element_text(size = 20),
+                 #         plot.title = element_text(hjust = 0.0)
+                   # )
+)
+pp$plot <- pp$plot + 
+  labs(title    = "Survival curves",
+       subtitle = "Based on Kaplan-Meier estimates"
+  ) +
+  scale_x_continuous(expand = c(0, 0)) + 
+  scale_y_continuous(expand = c(0, 0))
+pp
+
+pdf("D:/2001/AR_filter.pdf",
+    width = 10,
+    height = 10
+)
+print(pp, newpage = FALSE)
+dev.off()
+
 
 # cox analysis
 reg <- coxph(Surv(days, status) ~ AR_percent, data = metadata)
@@ -149,11 +260,66 @@ reg2 <- coxph(Surv(days, status) ~ AR_percent + subtype + dosing,
 survminer::ggforest(reg2, data = df_reg)
 cox.zph(reg2)
 
+
 # AR percent
-mm <- metadata %>% mutate(arP=if_else(AR_percent>0.7,'ARH','ARL'))
-mm <- mm %>% filter(SubjectID %in% f60_id)
-fit <- surv_fit(Surv(days, status)  ~ arP, data = mm)
+# meta_mlp <- readxl::read_excel('D:/2001/cn2001_metadata.xlsx')
+meta_mlp <- 
+  readxl::read_excel('D:/2001/GT0918-CN-2001乳腺癌分型-mlp-2021-11-04-更新.xlsx') %>% 
+  rename('SubjectID'='受试者编号') %>% 
+  mutate(AR_perc = 
+           case_when(
+             AR_percent >= 0.01 & AR_percent < 0.25 ~ 'AR+',
+             AR_percent >= 0.25 & AR_percent < 0.5 ~ 'AR2+',
+             AR_percent >= 0.5 & AR_percent < 0.75 ~ 'AR3+',
+             AR_percent >= 0.75 & AR_percent <= 1 ~ 'AR4+',
+             TRUE ~ 'ND'
+           )
+           )
+
+mm <- meta_mlp %>% select(SubjectID, AR_percent, AR_perc) %>% 
+  left_join(metadata, by = c('SubjectID'='SubjectID')) %>% 
+  mutate(arP=if_else(AR_percent>0.3,'ARH','ARL')) %>% 
+  select(SubjectID,AR_percent, AR_perc, dose, subtype, days, status, arP) %>% 
+  mutate(status = ifelse(status==2,1,0)) %>%
+  rstatix::convert_as_factor(AR_perc,subtype,arP)
+mm <- within(mm, AR_perc <- relevel(AR_perc, ref = 'AR+'))
+mm <- mm %>% filter(SubjectID %in% f_24)
+
+fit <- survfit(Surv(days, status)  ~ AR_perc, 
+                data = mm)
+surv_summary(fit)
 ggsurvplot(fit, pval = T)
+surv_pvalue(fit)
+sdff <- survdiff(Surv(days, status)  ~ AR_perc, 
+        data = mm)
+pairwise_survdiff(Surv(days, status)  ~ AR_perc, 
+                  data = mm)
+
+
+# cox
+reg <- coxph(Surv(days, status) ~ AR_perc, 
+              data = mm,
+             # ties = 'exact'
+             )
+cox.zph(reg)
+ggcoxzph(cox.zph(reg))
+survminer::ggforest(reg, 
+                    data = mm,
+                    fontsize = 1
+                    )
+summary(reg)
+summary(reg)$sctest
+summary(reg)$concordance
+coef(summary(reg))
+broom::glance(reg)
+summary(survfit(reg, newdata = mm), times = 100)
+
+
+forestmodel::forest_model(reg)
+
+ggcoxdiagnostics(reg, 
+                 type = "deviance",
+                 linear.predictions = FALSE, ggtheme = theme_bw())
 
 
 
@@ -204,13 +370,19 @@ zz <- qc1 %>% select(SubjectID, StudyVisit, DNAYield, days) %>%
   )) %>% 
   select(SubjectID,days,C1D1,C2D1,C2D28,C5D1,EOT)
 
-write_delim(zz, 'D:/2001/zz.txt', delim = '\t')
+my <- qc1 %>% select(SubjectID, StudyVisit, DNAYield, days) %>% 
+  arrange(StudyVisit) %>% 
+  drop_na() %>% 
+  pivot_wider(names_from = StudyVisit, values_from = DNAYield) %>% as.data.frame()
+
+
+write_delim(my, 'D:/2001/my.txt', delim = '\t')
 
 zzz <- zz %>% mutate(ratio=(as.double(EOT)-as.double(C1D1))/as.double(C1D1))
 zzz$SubjectID <- factor(zzz$SubjectID, levels = zzz$SubjectID)
 zzz %<>% mutate(across(starts_with(c('E','C')), as.double)) 
   # filter(SubjectID !='B02007')
-zzz %<>% filter(SubjectID %in% f60_id)
+zzz %<>% filter(!SubjectID %in% her_id)
 
 p1 <- ggplot(zzz, aes(x=SubjectID,y=C1D1)) +
   geom_col() +
@@ -219,19 +391,22 @@ p1 <- ggplot(zzz, aes(x=SubjectID,y=C1D1)) +
                                    hjust = 1, size = 8))
 p2 <- ggplot(zzz, aes(x=SubjectID,y=EOT)) +
   geom_col() +
-  # scale_y_break(c(200, 500), scales = 0.2) +
+  scale_y_break(c(200, 500), scales = 0.2) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, 
                                    hjust = 1, size = 8))
 
 p3 <- ggplot(zzz, aes(x=SubjectID,y=ratio)) +
   geom_col() +
-  # scale_y_break(c(1, 5), scales = 0.2) +
+  scale_y_break(c(1, 5), scales = 0.2) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, 
                                    hjust = 1, size = 8))
 
-p1/p2/p3
+p1/p2
+ggsave(filename = 'D:/2001/cfdna_HR_ratio.pdf', 
+       plot = p3, 
+       width = 10, height = 10)
 
 library(aplot)
 ap <- p3 %>% 
@@ -257,7 +432,7 @@ gene_mutation_count <- function(gene){
     arrange(days) %>% 
     distinct()
 }
-bar <- gene_mutation_count('PIK3CA') %>% data.frame()
+bar <- gene_mutation_count('ERBB2') %>% data.frame()
 
 write_delim(bar, 'D:/2001/mutation.txt', delim = '\t')
 
@@ -268,8 +443,8 @@ df1 %>% filter(StudyVisit %in% c('C1D1','Screening')) %>%
   group_by(SubjectID) %>% 
   count()
 # 统计某基因所有突变 在 不同采样期出现的数目
-aaaa <- df1 %>% filter(Hugo_Symbol=='') %>% 
-  filter(!SubjectID %in% f60_id) %>% 
+aaaa <- df1 %>% filter(Hugo_Symbol=='ESR1') %>% 
+  # filter(!SubjectID %in% f60_id) %>% 
   select(SubjectID, ExternalID, StudyVisit,Variant_Value, HGVSp) %>% 
   distinct() %>% group_by(HGVSp, StudyVisit) %>% 
   summarise(n = n()) %>% arrange(n) %>% 
@@ -281,14 +456,81 @@ write_delim(aaaa, 'D:/2001/genemutation.txt', delim = '\t')
 # 野生型和突变型 生存曲线(C1D1期)
 c1d1.samples <- df1 %>% filter(StudyVisit %in% c('C1D1','Screening')) %>% 
   select(SubjectID, Variant_Value, Hugo_Symbol,HGVSp, days, status) %>% 
-  filter(Hugo_Symbol=='ESR1') %>% select(SubjectID) %>% distinct()
+  filter(Hugo_Symbol=='TP53') %>% select(SubjectID) %>% distinct()
 
 m1 <- df1 %>% select(SubjectID, days, status) %>% distinct() %>%
-  filter(SubjectID %in% f60_id) %>% 
-  mutate(ESR1=if_else(SubjectID %in% c1d1.samples$SubjectID, 'mutant',
+  # filter(!SubjectID %in% her_id) %>%
+  mutate(gene=if_else(SubjectID %in% c1d1.samples$SubjectID, 'mutant',
                       'wildtype'))
-fit <- survfit(Surv(days, status) ~ ESR1, data = m1)
-ggsurvplot(fit, pval = T)
+fit <- survfit(Surv(days, status) ~ gene, data = m1)
+surv_median(fit)
+ggsurvplot(fit, pval = T,
+           ggtheme = theme_prism()
+           )
+
+pp <- ggsurvplot(fit, 
+                 data = m1,
+                 surv.median.line = "hv",
+                 legend.title = "TP53",
+                 # legend.labs = c("HER+++", "HR+", "TNBC"),
+                 legend.labs = c("Mutant", "Wlidtype"),
+                 legend = c(0.7,0.8),
+                 censor.shape="|", censor.size = 4,
+                 pval = TRUE,
+                 pval.method = TRUE,
+                 pval.size = 4,
+                 # pval.coord = c(0, 0.03),
+                 conf.int = FALSE,
+                 conf.int.style = "step",
+                 add.all = FALSE,
+                 risk.table = 'abs_pct',
+                 tables.height = 0.2,
+                 tables.theme = theme_cleantable(),
+                 risk.table.fontsize = 5,
+                 risk.table.y.text = TRUE,
+                 fontsize = 8,
+                 font.x = c(15),
+                 font.y = c(15),
+                 # font.family = 'Book Antiqua',
+                 # font.tickslab = c(20, "plain"),
+                 ncensor.plot = FALSE,
+                 ncensor.plot.height = 0.25,
+                 # cumevents.y.text = 8,
+                 # ylab="Cumulative survival (percentage)",
+                 xlab = " Time(Days)",
+                 break.time.by = 50,
+                 palette = 'aaas',
+                 ggtheme = cowplot::theme_cowplot(font_size = 15) +
+                   theme(axis.text.x = element_text(face = 'bold'),
+                         axis.text.y = element_text(face = 'bold'),
+                         axis.line = element_line(linetype = 'solid',
+                                                  size = 1),
+                         axis.ticks = element_line(size = 1),
+                         axis.title = element_text(face = 'bold')
+                         )
+                 # ggtheme = theme_prism() +
+                 #   theme(legend.text = element_text(size = 15),
+                 #         legend.title = element_text(size = 15),
+                 #         # axis.text.x = element_text(size = 20),
+                 #         # text = element_text(size = 20),
+                 #         plot.title = element_text(hjust = 0.0),
+                 #         plot.subtitle = element_text(hjust = 0.0)
+                 #   )
+)
+pp$plot <- pp$plot + 
+  labs(title    = "Survival curves",
+       subtitle = "Based on Kaplan-Meier estimates"
+  ) +
+  scale_x_continuous(expand = c(0, 0)) + 
+  scale_y_continuous(expand = c(0, 0))
+pp
+
+pdf("D:/2001/pik3ca_pathogenic.pdf",
+    width = 10,
+    height = 10
+)
+print(pp, newpage = FALSE)
+dev.off()
 
 # 只考虑C1D1期 pathogenic
 c1d1.samples <- df1 %>% 
@@ -302,11 +544,11 @@ c1d1.samples <- df1 %>%
 
 # plot --------------------------------------------------------------------
 
-aa <- metadata %>% select(SubjectID, days, subtype) %>% 
-  distinct() %>% arrange(days)
+aa <- df1 %>% select(SubjectID, days, subtype) %>% 
+  distinct() %>% arrange(days, SubjectID)
 
-aa <- metadata %>% 
-  filter(SubjectID %in% f60_id)
+aa <- aa %>% 
+  filter(SubjectID %in% trineg_id)
 aa$SubjectID <- factor(aa$SubjectID, levels = aa$SubjectID)
 
 ggplot(aa) + geom_bar(aes(x = SubjectID, y = days, fill=subtype), 
@@ -353,7 +595,7 @@ final_data <- df1 %>% select(SubjectID,days) %>%
   left_join(mut_ATM, by = c('SubjectID')) %>% 
   left_join(FGFR1_cnv, by = c('SubjectID'))
 
-final_data %<>% filter(SubjectID %in% f60_id)
+final_data %<>% filter(SubjectID %in% trineg_id)
 
 M <- final_data %>% 
   select(-days) %>%
@@ -375,16 +617,16 @@ Heatmap(t(M),
         clustering_method_columns = 'complete',
         # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
         col = circlize::colorRamp2(c(0,5), c("white", "firebrick3")),
-        width = ncol(M)*unit(20, "mm"),
-        height = nrow(M)*unit(6, "mm"),
+        width = ncol(M)*unit(30, "mm"),
+        height = nrow(M)*unit(3, "mm"),
         top_annotation = ha,
         column_names_rot = 90,
-        show_column_names = F,
+        show_column_names = T,
         # column_names_gp = gpar(fontsize=1)
 )
 
-# 某基因的全部突变
 
+# 某基因的全部突变
 filter_aa <- function(gene, aa){
   res <- df1 %>% filter(Hugo_Symbol==gene) %>% 
     filter(StudyVisit %in% c('C1D1','Screening')) %>%
@@ -408,8 +650,33 @@ all_gene <- c(
   "p.Asp739Tyr",
   "p.Leu725Ser"
 )
+all_gene <- Hmisc::Cs(
+  p.Phe134Cys,
+  p.Leu265del,
+  p.Leu194His,
+  p.Arg267Trp,
+  p.Tyr220Cys,
+  p.Arg175His,
+  p.Val143Met,
+  p.Gln144Pro,
+  p.Arg306Ter,
+  p.Pro177_Cys182del,
+  p.Lys132Arg,
+  p.Glu358Val,
+  p.Arg213Leu,
+  p.Asp281Gly,
+  p.Lys351Ter,
+  p.Cys124Arg,
+  p.Pro128LeufsTer42,
+  p.Val173Met,
+  p.Val173Ala,
+  p.Pro177Leu,
+  p.Arg267Gln,
+  p.Ser241Tyr
+)
 
-final_data <- metadata %>% select(SubjectID,days) %>% 
+final_data <- df1 %>% select(SubjectID,days) %>% 
+  distinct() %>% 
   arrange(days)
 for(i in all_gene){
   foo <- filter_aa('PIK3CA', i)
@@ -417,7 +684,7 @@ for(i in all_gene){
     left_join(foo, by = c('SubjectID'='SubjectID'))
   
 }
-final_data %<>% filter(SubjectID %in% f60_id)
+final_data %<>% filter(!SubjectID %in% her_id)
 M <- final_data %>% 
   select(-days) %>%
   column_to_rownames('SubjectID')
@@ -444,14 +711,45 @@ i_cnv <- df2 %>% filter(StudyVisit %in% c('C1D1','Screening')) %>%
   pivot_wider(names_from = Hugo_Symbol, values_from = Variant_Value) %>% 
   select(sort(names(.)))
 # i_cnv <- i_cnv[, order(names(i_cnv))]
-ff <- metadata %>% select(SubjectID,days) %>% 
+ff <- df1 %>% select(SubjectID,days) %>% 
+  distinct() %>% 
   arrange(days) %>% 
-  left_join(i_cnv, by = c('SubjectID')) %>% 
-  filter(SubjectID %in% f60_id)
+  left_join(i_cnv, by = c('SubjectID'))
+  filter(SubjectID %in% trineg_id)
+  
+write_delim(ff %>% select(-days), 
+            'D:/2001/cnv_freq.txt', delim = '\t'
+                   )
 M <- ff %>% 
   select(-days) %>% 
   column_to_rownames('SubjectID')
 ha <- columnAnnotation(bar = anno_barplot(ff$days))
+
+pdf("D:/2001/cnv_C1D1.pdf",
+    width = 10,
+    height = 10)
+Heatmap(t(M),
+        name = 'ratio',
+        na_col = 'white',
+        border_gp = gpar(col = 'black'),
+        show_row_dend = F,
+        show_column_dend = F,
+        cluster_columns = F,
+        cluster_rows = F,
+        clustering_distance_columns = 'euclidean',
+        clustering_distance_rows = 'euclidean',
+        clustering_method_rows = 'complete',
+        clustering_method_columns = 'complete',
+        col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
+        # col = circlize::colorRamp2(c(0,5), c("white", "firebrick3")),
+        width = ncol(M)*unit(35, "mm"),
+        height = nrow(M)*unit(1, "mm"),
+        top_annotation = ha,
+        column_names_rot = 90,
+        show_column_names = TRUE,
+        # column_names_gp = gpar(fontsize=1)
+)
+dev.off()
 
 
 # C1D1期AR CNV 出现与否的survival
@@ -475,10 +773,22 @@ m1 <- df1 %>% select(SubjectID, days, status) %>% distinct() %>%
   mutate(MYC=if_else(SubjectID %in% c1d1.MYC, 2,1)) %>% 
   mutate(NF2=if_else(SubjectID %in% c1d1.NF2, 2,1))
 
+m1 <- m1 %>% filter(!SubjectID %in% her_id)
+
 reg <- coxph(Surv(days, status) ~ FGFR1+CCND1+AKT3+MYC+NF2,
              data = m1)
 summary(reg)
-survminer::ggforest(reg, data = m1)
+survminer::ggforest(reg, data = m1,
+                    fontsize = 1
+                    )
+
+
+all_cnv <- unique(c(c1d1.FGFR1,c1d1.CCND1,c1d1.AKT3, c1d1.MYC, c1d1.NF2))
+
+m1 <- df1 %>% select(SubjectID, days, status) %>% distinct() %>%
+  mutate(CNVs=if_else(SubjectID %in% all_cnv, 'mutant','wildtype'))
+fit <- survfit(Surv(days, status) ~ CNVs, data = m1)
+ggsurvplot(fit, pval = T)
 
 # logitic regression ------------
 m1 %<>% mutate(class=if_else(days>150, 1, 0)) 
@@ -853,7 +1163,7 @@ ggsurvplot(fit, pval = T)
 
 her_id <- (metadata %>% filter(subtype == 'HER+++'))$SubjectID
 hr_id <- (metadata %>% filter(subtype == 'HR+'))$SubjectID
-trineg_id <- (metadata %>% filter(subtype == '三阴性'))$SubjectID
+trineg_id <- (metadata %>% filter(subtype == 'TNBC'))$SubjectID
 
 m_her <- metadata %>% filter(subtype != 'HER+++')
   
@@ -863,6 +1173,34 @@ ggsurvplot(fit2, pval = T)
 
 # 去掉60天以内样本的分析
 f60_id <- (metadata %>% filter(days > 100))$SubjectID
+
+
+f_24 <- c(
+  "B01002",
+  "B01003",
+  "B01004",
+  "B01005",
+  "B01007",
+  "B01010",
+  "B01014",
+  "B01015",
+  "B02001",
+  "B02002",
+  "B02007",
+  "B03001",
+  "B03004",
+  "B04003",
+  "B04004",
+  "B04007",
+  "B05003",
+  "B05004",
+  "B05005",
+  "B05009",
+  "B05011",
+  "B05012",
+  "B06006",
+  "B06009"
+)
 
 
 
@@ -946,7 +1284,7 @@ final_data <- df1 %>% select(SubjectID,days) %>%
   left_join(mut_ATM, by = c('SubjectID')) %>% 
   left_join(FGFR1_cnv, by = c('SubjectID'))
 
-final_data %<>% filter(SubjectID %in% f60_id)
+final_data %<>% filter(SubjectID %in% trineg_id)
 
 M <- final_data %>% 
   select(-days) %>%
@@ -968,9 +1306,9 @@ Heatmap(t(M),
         clustering_method_columns = 'complete',
         # col = circlize::colorRamp2(c(0, 2, 4), c("navy", "white", "firebrick3")),
         col = circlize::colorRamp2(c(0,5), c("white", "firebrick3")),
-        width = ncol(M)*unit(20, "mm"),
-        height = nrow(M)*unit(6, "mm"),
-        # top_annotation = ha,
+        width = ncol(M)*unit(30, "mm"),
+        height = nrow(M)*unit(3, "mm"),
+        top_annotation = ha,
         column_names_rot = 90,
         show_column_names = T,
         # column_names_gp = gpar(fontsize=1)
@@ -1027,7 +1365,8 @@ all_gene <- c(
   "p.Glu545Asp"
 )
 
-final_data <- metadata %>% select(SubjectID,days) %>% 
+final_data <- df1 %>% select(SubjectID,days) %>% 
+  distinct() %>% 
   arrange(days)
 for(i in all_gene){
   foo <- fff('PIK3CA', i)
@@ -1035,7 +1374,7 @@ for(i in all_gene){
     left_join(foo, by = c('SubjectID'='SubjectID'))
   
 }
-final_data %<>% filter(SubjectID %in% f60_id)
+final_data %<>% filter(!SubjectID %in% her_id)
 
 M <- final_data %>% 
   select(-days) %>%
@@ -1069,15 +1408,62 @@ i_cnv %<>%
   bind_rows(i_cnv_id(eot_c2d28_id, c('C2D28'))) %>% 
   bind_rows(i_cnv_id(eot_c2d1_id, c('C2D1')))
 
-ff <- metadata %>% select(SubjectID,days) %>% 
+ff <- df1 %>% select(SubjectID,days) %>% 
+  distinct() %>% 
   arrange(days) %>% 
-  left_join(i_cnv, by = c('SubjectID')) %>% 
-  filter(SubjectID %in% f60_id)
+  left_join(i_cnv, by = c('SubjectID'))
+  filter(SubjectID %in% trineg_id)
 
+write_delim(ff %>% select(-days), 
+            'D:/2001/cnv_freq_EOT.txt', delim = '\t')
 M <- ff %>% 
   select(-days) %>% 
   column_to_rownames('SubjectID')
 ha <- columnAnnotation(bar = anno_barplot(ff$days))
+
+ff %>% select(SubjectID, 'AKT3') %>% 
+  filter(!is.na(AKT3))
+
+# C1D1期AR CNV 出现与否的survival
+cnv.ss <- function(gene){
+  c1d1 <- ff %>% select(SubjectID, all_of(gene)) %>% 
+    filter(!is.na(.data[[gene]]))
+  c1d1$SubjectID
+}
+
+c1d1.FGFR1 <- ff %>% select(SubjectID, 'FGFR1') %>% filter(!is.na(FGFR1)) %>% pull(SubjectID)
+c1d1.CCND1 <- ff %>% select(SubjectID, 'CCND1') %>% filter(!is.na(CCND1)) %>% pull(SubjectID)
+c1d1.AKT3 <- ff %>% select(SubjectID, 'AKT3') %>% filter(!is.na(AKT3)) %>% pull(SubjectID)
+c1d1.MYC <- ff %>% select(SubjectID, 'MYC') %>% filter(!is.na(MYC)) %>% pull(SubjectID)
+c1d1.NF2 <- ff %>% select(SubjectID, 'NF2') %>% filter(!is.na(NF2)) %>% pull(SubjectID)
+c1d1.CDKN2A <- ff %>% select(SubjectID, CDKN2A) %>% filter(!is.na(CDKN2A)) %>% pull(SubjectID)
+
+m1 <- df1 %>% select(SubjectID, days, status) %>% distinct() %>%
+  mutate(FGFR1=if_else(SubjectID %in% c1d1.FGFR1, 2,1)) %>%
+  mutate(CCND1=if_else(SubjectID %in% c1d1.CCND1, 2,1)) %>%
+  mutate(AKT3=if_else(SubjectID %in% c1d1.AKT3, 2,1)) %>% 
+  mutate(MYC=if_else(SubjectID %in% c1d1.MYC, 2,1)) %>%
+  mutate(NF2=if_else(SubjectID %in% c1d1.NF2, 2,1)) %>%
+  mutate(CDKN2A=if_else(SubjectID %in% c1d1.CDKN2A, 2,1))
+
+# m1 <- m1 %>% filter(!SubjectID %in% her_id)
+
+reg <- coxph(Surv(days, status) ~ CDKN2A+AKT3+FGFR1+CCND1+MYC+NF2,
+             data = m1)
+summary(reg)
+survminer::ggforest(reg, data = m1,
+                    fontsize = 1
+)
+
+
+all_cnv <- unique(c(c1d1.FGFR1,c1d1.CCND1,c1d1.AKT3, c1d1.MYC, c1d1.NF2))
+
+m1 <- df1 %>% select(SubjectID, days, status) %>% distinct() %>%
+  mutate(CNVs=if_else(SubjectID %in% c1d1.AKT3, 'mutant','wildtype'))
+fit <- survfit(Surv(days, status) ~ CNVs, data = m1)
+ggsurvplot(fit, pval = T)
+
+
 
 
 
