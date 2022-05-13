@@ -49,6 +49,18 @@ lineage2 %>% janitor::tabyl(Lineage) %>%
   filter(!Lineage %in% c('Not evaluable, will be repeated in the next batch', 'Not evaluable')) %>%
   ggpubr::ggbarplot(x = 'Lineage', y = 'n', label = T, fill = "steelblue", color = "steelblue") +
   theme(axis.text.x = element_text(angle = 90))
+# 将AY的拼在一起的病毒系分布
+lineage2 %>%
+  mutate(Lineage2 = ifelse(str_detect(Lineage, '^AY'), 'Delta', Lineage)) %>%
+  mutate(Lineage2 = ifelse(str_detect(Lineage, '^BA'), 'Omicron', Lineage2)) %>%
+  mutate(Lineage2 = ifelse(Lineage2=='B.1.1.7', 'Alpha', Lineage2)) %>%
+  mutate(Lineage2 = ifelse(Lineage2=='P.1', 'Gamma', Lineage2)) %>%
+  mutate(Lineage2 = ifelse(Lineage2=='B.1.617.2', 'Delta', Lineage2)) %>%
+  janitor::tabyl(Lineage2) %>%
+  arrange(desc(n)) %>%
+  filter(!Lineage2 %in% c('Not evaluable, will be repeated in the next batch', 'Not evaluable')) %>%
+  ggpubr::ggbarplot(x = 'Lineage2', y = 'n', label = T, fill = "steelblue", color = "steelblue") +
+  theme(axis.text.x = element_text(angle = 90))
 
 
 # 各样本突变种类分布, 还只有150例的样本
