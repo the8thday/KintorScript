@@ -1,0 +1,110 @@
+---
+title: "tidy evaluation"
+author: "liuc"
+date: '2022-05-13'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## tidy evaluation
+
+tidy evaluation:
+在nonstandard evaluation programming中，传参有一些小trick，现记录如下：
+
+
+*data-mask* & *tidy-select*
+在函数中传参给tidy系列的命令时，有主要的两种形式，以下以`filter`, `select`作为主要示例。同时还有创建新变量名称的 需求，以`mutate`作为示例。传递参数的形式主要包括两个，一是传递环境变量中的字符串，包括直接和间接的形式，以及传递
+data-variable的symbol形式。
+
+
+data-mask
+```{r}
+# 传递字符串，直接或间接
+aa <- 'cyl'
+foo1 <- function(x) mtcars %>% head() %>% filter(.data[[x]] == 6)
+foo1('cyl')
+foo1(aa)
+
+# 传递data-mask的内容
+foo2 <- function(x) mtcars %>% filter({{ x }} == 6)
+foo2(cyl) # 环境变量无cyl
+cyl = 'foo'
+foo2(cyl) # 并不会传递foo字符串
+```
+
+tidy-select
+tidy-select主要是通过`tidyselect`包实现的，具体可参考此包的详细文档。
+```{r}
+# 传递字符串，直接或间接
+aa <- 'cyl'
+foo3 <- function(x) mtcars %>% head() %>% select(all_of(x))
+foo3('cyl')
+foo3(aa)
+
+# 传递data-mask的内容
+foo4 <- function(x) mtcars %>% select({{ x }})
+foo4(cyl) # 环境变量无cyl
+cyl = 'foo'
+foo4(cyl) # 并不会传递foo字符串
+```
+
+
+mutate
+当我们想在函数中传递新建变量的名字时，需要用到如下：
+```{r}
+# 当传递data-variab 这一symbol时（）不过这种传递不会出现在环境变量中，也即无法在函数所处的environment中存在
+foo5 <- function(x) mtcars %>% head() %>% mutate({{x}} := cyl *2)
+foo5(new_var) # new_var并不在当前环境存在
+
+# 传递字符串，直接或间接时
+bb <- 'new_v'
+foo6 <- function(x) mtcars %>% head() %>% mutate(!!x := cyl * 2)
+foo6('new_v')
+foo6(bb)
+new_v <- 'bar'
+foo6(new_v)
+```
+
+出了以上利用海象符的操作外还有一种操作可以用来修改变量名，即利用glue字符串的形式，上述`foo5`函数其实也可以加上双引号。
+```{r}
+foo7 <- function(x) mtcars %>% head() %>% mutate('{{x}}' := cyl * 2)
+foo8 <- function(x) mtcars %>% head() %>% mutate('hehe_{{x}}' := cyl * 2)
+
+foo7(new_v)
+foo8(new_v)
+```
+
+
+来自stackoverflow的一个极好的例子
+https://stackoverflow.com/questions/32817780/what-is-the-r-assignment-operator-for
+```{r}
+
+df <- tibble(
+  g1 = c(1, 1, 2, 2, 2),
+  g2 = c(1, 2, 1, 2, 1),
+  a = sample(5),
+  b = sample(5)
+)
+
+my_mutate <- function(df, expr) {
+  expr <- enquo(expr)
+  print(str(expr))
+  print(expr)
+  mean_name <- paste0("mean_", quo_name(expr))
+  sum_name <- paste0("sum_", quo_name(expr))
+  print(mean_name)
+
+  mutate(df,
+    !! mean_name := mean(!! expr),
+    !! sum_name := sum(!! expr)
+  )
+}
+
+my_mutate(df, a)
+```
+
+
+
