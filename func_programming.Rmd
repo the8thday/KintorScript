@@ -1,0 +1,128 @@
+---
+title: "functional programming"
+author: "liuc"
+date: '2022-05-16'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R functional programming
+
+主要参考如下的内容：
+https://dcl-prog.stanford.edu/
+
+
+#### tidy-evluation
+
+函数式编程在R中具有重要的作用。
+在此之前我们需要先了解R中传参的两种主要的形式: In R, you can divide function arguments into two classes: evaluated and quoted.
+在理清tidy-evaluation时，我们曾做过一些初步的探讨，尤其对生成一个变量做了多个示例，现在应该清楚quoted的用法了。
+quoted的变量既是在函数运行时不对其进行evaluation的变量，一般也不存在于环境变量中。
+Quosures are objects and so can be passed around, carrying their environment with them.
+
+
+```{r}
+# 建立quosure对象的建立包含其环境，所以在函数中用enquo函数代替quo函数
+grouped_mean <- function(df, group_var, summary_var){
+  group_var <- enquo(group_var)
+  summary_var <- enquo(summary_var)
+  print(group_var)
+  
+  df %>% 
+    group_by(!! group_var) %>% 
+    summarise(
+      mean = mean(!! summary_var)
+    )
+}
+
+grouped_mean(mpg, manufacturer, cty)
+```
+
+
+下面的函数模版，在我们传递给`tidyverse`系列函数一个quosure（一个symbol）时，可以作为参考。但并不是传递字符串的形式。
+```{r}
+my_tidyeval_function <- function(column_name) {
+  column_name <- enquo(column_name)
+  
+  df %>% 
+    dplyr_verb(!! column_name)
+}
+```
+
+
+Notice that with`...`, we didn’t have to use `enquo() or !!`. `...` takes care of all the quoting and unquoting for you.
+```{r}
+grouped_mean_2 <- function(df, summary_var, ...) {
+  summary_var <- enquo(summary_var)
+  
+  df %>% 
+    group_by(...) %>% 
+    summarize(mean = mean(!! summary_var))
+}
+
+grouped_mean_2(df = mpg, summary_var = cty, manufacturer, model)
+```
+
+
+#### list-column
+
+下面详细理清list-column的用法。
+
+`nest` 函数的用法：`nest`用来用类似`group_by`的形式生成column为tibble的数据格式。
+```{r}
+foo <- mpg %>% 
+  select(manufacturer, model) %>% 
+  nest(new_var = model)
+
+foo
+
+foo$new_var[[1]]
+```
+
+
+出了上面所诉的`tibble`格式的list-column外，还有`vector`形式的，可以通过`summarise`得到
+```{r}
+mpg %>% 
+  select(manufacturer, model) %>% 
+  group_by(manufacturer) %>% 
+  summarise(new_v = list(model))
+```
+
+#### functions
+
+R语言函数的一些笔记.
+Q: 什么是vector function，scalar function？什么是predicate function？
+
+在使用`dplyr`时，向量化的操作让人忘记了，在R中也是有标量操作的，这种操作在对诸如`mutate`一类的函数时，会报waring。
+这在我们的使用中应多加小心。
+
+`if()else()`, `ifelse/if_else/case_when`,之间的主要差别在于后者是vector的。 
+
+```{r}
+
+```
+
+
+#### purrr的一些小用法
+
+本文中以`.`作为测试数据的小trick也是挺有意思的。
+
+```{r}
+map(mpg, sort, decreasing = TRUE) # sort函数的参数直接放在后面
+
+
+# shortcut for 匿名函数
+# The ~ tells map() that an anonymous function is coming. The . refers to the function argument, taking the place of x from the full anonymous function syntax.
+map(moons, function(x) x * 0.62)
+moons %>% 
+  map(~ . * 0.62) # 这种形式在tidy中还是听常用的
+
+```
+
+对于`map2`,`pmap`,等需要强调的是其在两个vector中的并行关系。对于匿名函数的参数分别为: `.`, `.x .y`, `..1 ..2 ..3`
+
+
+
