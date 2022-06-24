@@ -78,6 +78,23 @@ ProjectTemplate is a system for automating the thoughtless parts of a data analy
 一个对数据进行summary的工具集合
 
 
-### 
+### marginaleffects
+
+marginaleffects is an R package to compute and plot adjusted predictions, marginal effects, contrasts, and marginal means for a wide variety of models.
+
+
+# R for pharma
+```{r}
+# https://pharmaverse.org/nonpharma/ 有挺多的R包推荐
+
+# visR  看样子以后做生存分析需要这种了
+# The goal of visR is to enable fit-for-purpose, reusable clinical and medical research focused visualizations and tables with sensible defaults and based on sound graphical principles.
+
+# pharmaverse https://pharmaverse.org/
+#
+
+
+
+```
 
 
