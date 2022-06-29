@@ -98,3 +98,12 @@ marginaleffects is an R package to compute and plot adjusted predictions, margin
 ```
 
 
+
+
+### grafify
+
+一个方便的R绘图包，在emmeans绘制时比较的方便。
+
+
+
+
