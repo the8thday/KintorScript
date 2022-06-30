@@ -105,5 +105,11 @@ marginaleffects is an R package to compute and plot adjusted predictions, margin
 一个方便的R绘图包，在emmeans绘制时比较的方便。
 
 
+### https://r-sassy.org/
+The sassy system was built for these programmers. The system offers a set of packages that make programming in R much more similar to programming in SAS®.
+
+在R markdown中也可以跑SAS
+
+
 
 
